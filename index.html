@@ -1,0 +1,2669 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Global Supply Chain Explorer — Nifty 50 &amp; Nasdaq-100</title>
+<script src="https://d3js.org/d3.v7.min.js"></script>
+<style>
+  :root {
+    --bg-dark: #090d16;
+    --bg-panel: #111827;
+    --bg-card: #1b2436;
+    --bg-card-hover: #243047;
+    --text-primary: #f1f5f9;
+    --text-secondary: #94a3b8;
+    --text-muted: #64748b;
+    --accent: #3b82f6;
+    --accent-glow: rgba(59,130,246,0.35);
+    --border: #1e293b;
+    --green: #10b981;
+    --red: #ef4444;
+    --amber: #f59e0b;
+    --purple: #8b5cf6;
+    --pink: #ec4899;
+    --cyan: #06b6d4;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    background: var(--bg-dark);
+    color: var(--text-primary);
+    overflow: hidden;
+    height: 100vh;
+    width: 100vw;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* ── HEADER ── */
+  #header {
+    flex-shrink: 0;
+    min-height: 54px;
+    background: var(--bg-panel);
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 8px 14px;
+    z-index: 100;
+    flex-wrap: wrap;
+  }
+  .header-left {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+    flex-wrap: wrap;
+  }
+  .pane-toggle {
+    background: var(--bg-card);
+    border: 1px solid #2b384e;
+    color: var(--text-primary);
+    border-radius: 6px;
+    padding: 5px 9px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    transition: background .15s, border-color .15s;
+    white-space: nowrap;
+  }
+  .pane-toggle:hover { background: var(--bg-card-hover); border-color: var(--accent); }
+  #header h1 {
+    font-size: 15px;
+    font-weight: 700;
+    letter-spacing: -0.3px;
+    background: linear-gradient(135deg, #60a5fa, var(--cyan));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    white-space: nowrap;
+  }
+
+  /* ── INDEX SWITCHER TOGGLE ── */
+  .index-switcher {
+    display: inline-flex;
+    background: var(--bg-dark);
+    border: 1px solid #2b384e;
+    border-radius: 8px;
+    padding: 2px;
+    gap: 2px;
+  }
+  .index-tab {
+    border: none;
+    background: transparent;
+    color: var(--text-secondary);
+    padding: 4px 10px;
+    border-radius: 6px;
+    font-size: 11.5px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all .15s;
+    white-space: nowrap;
+  }
+  .index-tab:hover { color: var(--text-primary); background: rgba(255,255,255,0.04); }
+  .index-tab.active {
+    background: var(--accent);
+    color: #ffffff;
+    box-shadow: 0 2px 8px rgba(59,130,246,0.35);
+  }
+  .index-tab[data-index="nasdaq"].active {
+    background: linear-gradient(135deg, #0284c7, #06b6d4);
+    box-shadow: 0 2px 8px rgba(6,182,212,0.35);
+  }
+  .index-tab[data-index="combined"].active {
+    background: linear-gradient(135deg, #4f46e5, #06b6d4);
+    box-shadow: 0 2px 8px rgba(99,102,241,0.35);
+  }
+
+  #header .stats {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 7px;
+    font-size: 11.5px;
+    color: var(--text-secondary);
+  }
+  .stat-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 3px 8px;
+    border-radius: 999px;
+    background: var(--bg-card);
+    border: 1px solid transparent;
+    cursor: pointer;
+    transition: all .15s;
+    user-select: none;
+    white-space: nowrap;
+  }
+  .stat-pill:hover { border-color: #334155; color: var(--text-primary); }
+  .stat-pill.active-status { border-color: var(--accent); background: rgba(59,130,246,0.16); color: var(--text-primary); }
+  .stat-pill.static { cursor: default; }
+  .stat-pill.static:hover { border-color: transparent; color: var(--text-secondary); }
+  .stat-pill .dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  /* ── MAIN WORKSPACE ── */
+  #workspace {
+    flex: 1;
+    display: flex;
+    min-height: 0;
+    position: relative;
+    overflow: hidden;
+  }
+
+  /* ── LEFT SIDEBAR ── */
+  #sidebar {
+    width: 300px;
+    flex-shrink: 0;
+    background: var(--bg-panel);
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    z-index: 90;
+    overflow: hidden;
+  }
+  #sidebar.collapsed { display: none; }
+  #search-box {
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--border);
+  }
+  #search-box input {
+    width: 100%;
+    padding: 8px 11px;
+    background: var(--bg-card);
+    border: 1px solid #2b384e;
+    border-radius: 6px;
+    color: var(--text-primary);
+    font-size: 12.5px;
+    outline: none;
+    transition: border-color .2s;
+  }
+  #search-box input:focus { border-color: var(--accent); }
+  #search-box input::placeholder { color: var(--text-muted); }
+
+  #sector-filters {
+    padding: 8px 14px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+    max-height: 215px;
+    overflow-y: auto;
+  }
+  #sector-filters::-webkit-scrollbar { width: 4px; }
+  #sector-filters::-webkit-scrollbar-thumb { background: #334155; border-radius: 2px; }
+
+  .sector-btn {
+    padding: 3px 8px;
+    border-radius: 12px;
+    font-size: 10.5px;
+    font-weight: 500;
+    border: 1px solid #2b384e;
+    background: transparent;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: all .15s;
+    white-space: nowrap;
+  }
+  .sector-btn:hover { border-color: var(--accent); color: var(--text-primary); }
+  .sector-btn.active {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: white;
+  }
+
+  #filter-row {
+    padding: 8px 14px;
+    border-bottom: 1px solid var(--border);
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+  }
+  #filter-row select {
+    width: 100%;
+    padding: 5px 8px;
+    background: var(--bg-card);
+    border: 1px solid #2b384e;
+    border-radius: 6px;
+    color: var(--text-primary);
+    font-size: 11.5px;
+    outline: none;
+    cursor: pointer;
+  }
+  #filter-row select option { background: var(--bg-card); }
+
+  #company-list {
+    flex: 1;
+    overflow-y: auto;
+    padding: 6px 0;
+  }
+  #company-list::-webkit-scrollbar { width: 5px; }
+  #company-list::-webkit-scrollbar-thumb { background: #334155; border-radius: 3px; }
+
+  .list-section-header {
+    padding: 6px 14px 4px;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.6px;
+    text-transform: uppercase;
+    color: var(--text-muted);
+  }
+  .company-item {
+    padding: 8px 14px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    transition: background .15s;
+    border-left: 3px solid transparent;
+  }
+  .company-item:hover { background: var(--bg-card); }
+  .company-item.active {
+    background: rgba(59,130,246,0.12);
+    border-left-color: var(--accent);
+  }
+  .company-item .icon {
+    width: 30px;
+    height: 30px;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10.5px;
+    font-weight: 700;
+    flex-shrink: 0;
+  }
+  .company-item .info { flex: 1; min-width: 0; }
+  .company-item .name {
+    font-size: 12.5px;
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .company-item .sector-label {
+    font-size: 10.5px;
+    color: var(--text-muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .company-item .badge {
+    font-size: 10px;
+    padding: 2px 6px;
+    border-radius: 8px;
+    background: var(--bg-dark);
+    color: var(--text-secondary);
+    flex-shrink: 0;
+  }
+
+  /* ── GRAPH AREA ── */
+  #graph-container {
+    flex: 1;
+    min-width: 0;
+    height: 100%;
+    position: relative;
+    background: radial-gradient(circle at center, #0f1626 0%, var(--bg-dark) 75%);
+    overflow: hidden;
+  }
+  svg { width: 100%; height: 100%; display: block; }
+  .link { stroke-opacity: 0.32; transition: stroke-opacity .2s, stroke-width .2s; }
+  .link:hover { stroke-opacity: 0.85; }
+  .node circle { cursor: pointer; transition: r .2s, opacity .2s; }
+  .node text {
+    fill: var(--text-secondary);
+    pointer-events: none;
+    text-anchor: middle;
+    text-shadow: 0 1px 4px rgba(0,0,0,0.9);
+  }
+  .node.highlighted circle { filter: drop-shadow(0 0 10px var(--accent-glow)); }
+  .node.dimmed { opacity: 0.11; }
+  .link.dimmed { opacity: 0.025 !important; }
+  .link.highlighted { stroke-opacity: 0.95 !important; stroke-width: 2.3px !important; }
+
+  /* ── LEGEND & CONTROLS ── */
+  #graph-hud-bottom {
+    position: absolute;
+    bottom: 12px;
+    left: 12px;
+    right: 12px;
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 10px;
+    pointer-events: none;
+    z-index: 80;
+  }
+  #legend {
+    pointer-events: auto;
+    background: rgba(17,24,39,0.92);
+    backdrop-filter: blur(8px);
+    border: 1px solid #263248;
+    border-radius: 10px;
+    padding: 8px 12px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 12px;
+    font-size: 11px;
+    max-width: calc(100% - 170px);
+  }
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    color: var(--text-secondary);
+    white-space: nowrap;
+  }
+  .legend-dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
+  .legend-line { width: 16px; height: 2px; border-radius: 1px; flex-shrink: 0; }
+
+  #graph-controls {
+    pointer-events: auto;
+    display: flex;
+    gap: 5px;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+  .ctrl-btn {
+    height: 34px;
+    min-width: 34px;
+    padding: 0 9px;
+    border-radius: 8px;
+    background: rgba(17,24,39,0.92);
+    backdrop-filter: blur(8px);
+    border: 1px solid #263248;
+    color: var(--text-secondary);
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 13px;
+    font-weight: 600;
+    transition: all .15s;
+    white-space: nowrap;
+  }
+  .ctrl-btn:hover { background: var(--bg-card); color: var(--text-primary); border-color: var(--accent); }
+  .ctrl-btn.active-mode { background: rgba(59,130,246,0.18); border-color: var(--accent); color: #93c5fd; }
+
+  /* ── RIGHT DETAIL PANEL ── */
+  #detail-panel {
+    width: 330px;
+    flex-shrink: 0;
+    background: var(--bg-panel);
+    border-left: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    z-index: 90;
+    overflow: hidden;
+  }
+  #detail-panel.collapsed { display: none; }
+  .detail-topbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 16px;
+    border-bottom: 1px solid var(--border);
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    color: var(--text-muted);
+  }
+  .close-detail-btn {
+    background: transparent;
+    border: 1px solid transparent;
+    color: var(--text-secondary);
+    cursor: pointer;
+    font-size: 16px;
+    line-height: 1;
+    padding: 2px 6px;
+    border-radius: 4px;
+  }
+  .close-detail-btn:hover { background: var(--bg-card); color: var(--text-primary); }
+
+  #detail-content {
+    flex: 1;
+    overflow-y: auto;
+    padding: 16px;
+  }
+  #detail-content::-webkit-scrollbar { width: 5px; }
+  #detail-content::-webkit-scrollbar-thumb { background: #334155; border-radius: 3px; }
+
+  .detail-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 14px;
+    padding-bottom: 14px;
+    border-bottom: 1px solid var(--border);
+  }
+  .detail-icon {
+    width: 44px;
+    height: 44px;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    font-weight: 700;
+    flex-shrink: 0;
+  }
+  .detail-title { font-size: 15.5px; font-weight: 700; line-height: 1.25; }
+  .detail-subtitle { font-size: 11.5px; color: var(--text-muted); margin-top: 3px; }
+
+  .detail-section { margin-bottom: 18px; }
+  .detail-section h3 {
+    font-size: 10.5px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--text-muted);
+    margin-bottom: 8px;
+  }
+  .detail-tags { display: flex; flex-wrap: wrap; gap: 6px; }
+  .detail-tag {
+    padding: 4px 9px;
+    border-radius: 6px;
+    font-size: 11px;
+    font-weight: 600;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+  }
+  .tag-listed { background: rgba(16,185,129,0.14); color: var(--green); }
+  .tag-unlisted { background: rgba(245,158,11,0.14); color: var(--amber); }
+  .tag-nifty { background: rgba(59,130,246,0.16); color: #60a5fa; }
+  .tag-ndx { background: rgba(6,182,212,0.16); color: #22d3ee; }
+  .tag-intl { background: rgba(139,92,246,0.15); color: #a78bfa; }
+
+  .supply-chain-item {
+    padding: 8px 10px;
+    margin-bottom: 5px;
+    background: var(--bg-card);
+    border-radius: 7px;
+    border: 1px solid transparent;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    transition: all .15s;
+    font-size: 12px;
+  }
+  .supply-chain-item:hover { background: var(--bg-card-hover); border-color: #334155; }
+  .supply-chain-item .sc-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+  .supply-chain-item .sc-main { flex: 1; min-width: 0; }
+  .supply-chain-item .sc-name {
+    font-weight: 600;
+    font-size: 12px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .supply-chain-item .sc-sub {
+    font-size: 10.5px;
+    color: var(--text-muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .supply-chain-item .sc-status {
+    font-size: 9.5px;
+    font-weight: 600;
+    padding: 2px 6px;
+    border-radius: 4px;
+    flex-shrink: 0;
+  }
+
+  .empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    text-align: center;
+    padding: 28px;
+  }
+  .empty-state svg { width: 52px; height: 52px; margin-bottom: 14px; opacity: 0.35; }
+  .empty-state p { color: var(--text-muted); font-size: 12.5px; line-height: 1.6; }
+
+  /* ── TOOLTIP ── */
+  #tooltip {
+    position: fixed;
+    background: rgba(17,24,39,0.96);
+    border: 1px solid #334155;
+    border-radius: 8px;
+    padding: 9px 12px;
+    font-size: 12px;
+    pointer-events: none;
+    z-index: 200;
+    display: none;
+    max-width: 270px;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.55);
+  }
+  #tooltip .tt-name { font-weight: 700; margin-bottom: 3px; }
+  #tooltip .tt-info { color: var(--text-secondary); font-size: 11px; line-height: 1.4; }
+
+  @media (max-width: 1050px) {
+    #sidebar {
+      position: absolute;
+      top: 0; left: 0; bottom: 0;
+      width: min(300px, 85vw);
+      box-shadow: 8px 0 32px rgba(0,0,0,0.5);
+    }
+    #detail-panel {
+      position: absolute;
+      top: 0; right: 0; bottom: 0;
+      width: min(330px, 88vw);
+      box-shadow: -8px 0 32px rgba(0,0,0,0.5);
+    }
+    #workspace.detail-overlay-open #graph-hud-bottom {
+      right: calc(min(330px, 88vw) + 12px);
+    }
+    #workspace.sidebar-overlay-open #graph-hud-bottom {
+      left: calc(min(300px, 85vw) + 12px);
+    }
+  }
+  @media (max-width: 720px) {
+    #header .stats { display: none; }
+    #legend { display: none; }
+  }
+</style>
+</head>
+<body>
+
+<!-- HEADER -->
+<div id="header">
+  <div class="header-left">
+    <button class="pane-toggle" id="toggle-sidebar-btn" onclick="toggleSidebar()" title="Toggle Companies Panel">☰ Companies</button>
+    <h1 id="app-title">Supply Chain Explorer</h1>
+    <div class="index-switcher" role="tablist" aria-label="Select Market Index">
+      <button class="index-tab active" data-index="nifty" onclick="switchIndex('nifty')">🇮🇳 Nifty 50</button>
+      <button class="index-tab" data-index="nasdaq" onclick="switchIndex('nasdaq')">🇺🇸 Nasdaq-100</button>
+      <button class="index-tab" data-index="combined" onclick="switchIndex('combined')">🌐 Combined</button>
+    </div>
+  </div>
+  <div class="stats" id="header-stats"></div>
+</div>
+
+<!-- MAIN WORKSPACE -->
+<div id="workspace">
+  <!-- LEFT SIDEBAR -->
+  <div id="sidebar">
+    <div id="search-box">
+      <input type="text" id="search-input" placeholder="Search companies, listed or unlisted vendors...">
+    </div>
+    <div id="sector-filters"></div>
+    <div id="filter-row">
+      <select id="rel-type-select" title="Filter by Relationship Type">
+        <option value="all">All Relationships</option>
+        <option value="supplier">Suppliers / Mfg</option>
+        <option value="partner">Partners / Tech</option>
+        <option value="customer">Channels / Buyers</option>
+        <option value="logistics">Logistics / 3PL</option>
+        <option value="subsidiary">JVs / Subsidiaries</option>
+      </select>
+      <select id="listing-filter-select" title="Filter by Listing Status"></select>
+    </div>
+    <div id="company-list"></div>
+  </div>
+
+  <!-- GRAPH -->
+  <div id="graph-container">
+    <svg id="graph-svg"></svg>
+    <div id="graph-hud-bottom">
+      <div id="legend"></div>
+      <div id="graph-controls">
+        <button class="ctrl-btn" id="color-mode-btn" onclick="toggleColorMode()" title="Switch between Listing Status and Sector colors">Color: Status</button>
+        <button class="ctrl-btn" onclick="zoomBy(1.3)" title="Zoom In">+</button>
+        <button class="ctrl-btn" onclick="zoomBy(0.77)" title="Zoom Out">−</button>
+        <button class="ctrl-btn" onclick="fitAllOrFiltered()" title="Fit to View">Fit</button>
+        <button class="ctrl-btn" onclick="resetView()" title="Reset All Filters">Reset</button>
+        <button class="ctrl-btn" id="label-toggle-btn" onclick="toggleLabels()" title="Toggle Node Labels">Aa</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- RIGHT DETAIL PANEL -->
+  <div id="detail-panel">
+    <div class="detail-topbar">
+      <span>Company Inspector</span>
+      <button class="close-detail-btn" onclick="toggleDetailPanel(false)" title="Close Panel">×</button>
+    </div>
+    <div id="detail-content"></div>
+  </div>
+</div>
+
+<!-- TOOLTIP -->
+<div id="tooltip">
+  <div class="tt-name"></div>
+  <div class="tt-info"></div>
+</div>
+
+<script>
+// ════════════════════════════════════════════════════════════
+//  SECTOR PALETTE
+// ════════════════════════════════════════════════════════════
+const SECTOR_COLORS = {
+  // Nifty 50 sectors
+  "Financial Services": "#3b82f6",
+  "Information Technology": "#06b6d4",
+  "Oil, Gas & Energy": "#f97316",
+  "Automobile & Auto Components": "#ef4444",
+  "FMCG": "#10b981",
+  "Healthcare & Pharma": "#ec4899",
+  "Metals & Mining": "#8b5cf6",
+  "Capital Goods & Construction": "#f59e0b",
+  "Telecom": "#6366f1",
+  "Power": "#eab308",
+  "Consumer Durables & Retail": "#14b8a6",
+  "Services & Aviation": "#a855f7",
+  "Technology Partners": "#06b6d4",
+  "Logistics": "#64748b",
+  "Chemicals & Packaging": "#84cc16",
+  // Nasdaq-100 sectors
+  "Semiconductors & Hardware": "#ef4444",
+  "Cloud, AI & Software": "#06b6d4",
+  "Consumer Tech & Media": "#8b5cf6",
+  "Cybersecurity": "#f43f5e",
+  "Healthcare & Biotech": "#ec4899",
+  "Retail & E-Commerce": "#10b981",
+  "Food & Beverage": "#84cc16",
+  "Auto & Mobility": "#f97316",
+  "Industrials & Aerospace": "#f59e0b",
+  "Energy & Utilities": "#eab308",
+  "Logistics & Telecom": "#6366f1",
+  "Payments & Business Services": "#3b82f6",
+};
+
+function getSectorColor(sector) {
+  return SECTOR_COLORS[sector] || "#64748b";
+}
+
+// ════════════════════════════════════════════════════════════
+//  DATASET 1: NIFTY 50 (50 Anchors + 121 Suppliers + 276 Links)
+// ════════════════════════════════════════════════════════════
+const niftyAnchorsRaw = [
+  { id: "HDFCBANK", name: "HDFC Bank", sector: "Financial Services", symbol: "HDFCBANK", exchange: "NSE" },
+  { id: "ICICIBANK", name: "ICICI Bank", sector: "Financial Services", symbol: "ICICIBANK", exchange: "NSE" },
+  { id: "SBIN", name: "State Bank of India", sector: "Financial Services", symbol: "SBIN", exchange: "NSE" },
+  { id: "KOTAKBANK", name: "Kotak Mahindra Bank", sector: "Financial Services", symbol: "KOTAKBANK", exchange: "NSE" },
+  { id: "AXISBANK", name: "Axis Bank", sector: "Financial Services", symbol: "AXISBANK", exchange: "NSE" },
+  { id: "BAJFINANCE", name: "Bajaj Finance", sector: "Financial Services", symbol: "BAJFINANCE", exchange: "NSE" },
+  { id: "BAJAJFINSV", name: "Bajaj Finserv", sector: "Financial Services", symbol: "BAJAJFINSV", exchange: "NSE" },
+  { id: "JIOFIN", name: "Jio Financial Services", sector: "Financial Services", symbol: "JIOFIN", exchange: "NSE" },
+  { id: "HDFCLIFE", name: "HDFC Life Insurance", sector: "Financial Services", symbol: "HDFCLIFE", exchange: "NSE" },
+  { id: "SBILIFE", name: "SBI Life Insurance", sector: "Financial Services", symbol: "SBILIFE", exchange: "NSE" },
+  { id: "SHRIRAMFIN", name: "Shriram Finance", sector: "Financial Services", symbol: "SHRIRAMFIN", exchange: "NSE" },
+  { id: "BSE", name: "BSE Limited", sector: "Financial Services", symbol: "BSE", exchange: "NSE" },
+  { id: "TCS", name: "Tata Consultancy Services", sector: "Information Technology", symbol: "TCS", exchange: "NSE" },
+  { id: "INFY", name: "Infosys", sector: "Information Technology", symbol: "INFY", exchange: "NSE" },
+  { id: "HCLTECH", name: "HCL Technologies", sector: "Information Technology", symbol: "HCLTECH", exchange: "NSE" },
+  { id: "TECHM", name: "Tech Mahindra", sector: "Information Technology", symbol: "TECHM", exchange: "NSE" },
+  { id: "RELIANCE", name: "Reliance Industries", sector: "Oil, Gas & Energy", symbol: "RELIANCE", exchange: "NSE" },
+  { id: "ONGC", name: "ONGC", sector: "Oil, Gas & Energy", symbol: "ONGC", exchange: "NSE" },
+  { id: "COALINDIA", name: "Coal India", sector: "Oil, Gas & Energy", symbol: "COALINDIA", exchange: "NSE" },
+  { id: "MARUTI", name: "Maruti Suzuki", sector: "Automobile & Auto Components", symbol: "MARUTI", exchange: "NSE" },
+  { id: "TATAMOTORS", name: "Tata Motors", sector: "Automobile & Auto Components", symbol: "TATAMOTORS", exchange: "NSE" },
+  { id: "M&M", name: "Mahindra & Mahindra", sector: "Automobile & Auto Components", symbol: "M&M", exchange: "NSE" },
+  { id: "BAJAJ-AUTO", name: "Bajaj Auto", sector: "Automobile & Auto Components", symbol: "BAJAJ-AUTO", exchange: "NSE" },
+  { id: "EICHERMOT", name: "Eicher Motors", sector: "Automobile & Auto Components", symbol: "EICHERMOT", exchange: "NSE" },
+  { id: "HINDUNILVR", name: "Hindustan Unilever", sector: "FMCG", symbol: "HINDUNILVR", exchange: "NSE" },
+  { id: "ITC", name: "ITC", sector: "FMCG", symbol: "ITC", exchange: "NSE" },
+  { id: "NESTLEIND", name: "Nestlé India", sector: "FMCG", symbol: "NESTLEIND", exchange: "NSE" },
+  { id: "TATACONSUM", name: "Tata Consumer Products", sector: "FMCG", symbol: "TATACONSUM", exchange: "NSE" },
+  { id: "SUNPHARMA", name: "Sun Pharmaceutical", sector: "Healthcare & Pharma", symbol: "SUNPHARMA", exchange: "NSE" },
+  { id: "CIPLA", name: "Cipla", sector: "Healthcare & Pharma", symbol: "CIPLA", exchange: "NSE" },
+  { id: "DRREDDY", name: "Dr. Reddy's Labs", sector: "Healthcare & Pharma", symbol: "DRREDDY", exchange: "NSE" },
+  { id: "APOLLOHOSP", name: "Apollo Hospitals", sector: "Healthcare & Pharma", symbol: "APOLLOHOSP", exchange: "NSE" },
+  { id: "MAXHEALTH", name: "Max Healthcare", sector: "Healthcare & Pharma", symbol: "MAXHEALTH", exchange: "NSE" },
+  { id: "TATASTEEL", name: "Tata Steel", sector: "Metals & Mining", symbol: "TATASTEEL", exchange: "NSE" },
+  { id: "JSWSTEEL", name: "JSW Steel", sector: "Metals & Mining", symbol: "JSWSTEEL", exchange: "NSE" },
+  { id: "HINDALCO", name: "Hindalco Industries", sector: "Metals & Mining", symbol: "HINDALCO", exchange: "NSE" },
+  { id: "ADANIENT", name: "Adani Enterprises", sector: "Metals & Mining", symbol: "ADANIENT", exchange: "NSE" },
+  { id: "LT", name: "Larsen & Toubro", sector: "Capital Goods & Construction", symbol: "LT", exchange: "NSE" },
+  { id: "ULTRACEMCO", name: "UltraTech Cement", sector: "Capital Goods & Construction", symbol: "ULTRACEMCO", exchange: "NSE" },
+  { id: "GRASIM", name: "Grasim Industries", sector: "Capital Goods & Construction", symbol: "GRASIM", exchange: "NSE" },
+  { id: "BEL", name: "Bharat Electronics", sector: "Capital Goods & Construction", symbol: "BEL", exchange: "NSE" },
+  { id: "BHARTIARTL", name: "Bharti Airtel", sector: "Telecom", symbol: "BHARTIARTL", exchange: "NSE" },
+  { id: "NTPC", name: "NTPC", sector: "Power", symbol: "NTPC", exchange: "NSE" },
+  { id: "POWERGRID", name: "Power Grid Corp", sector: "Power", symbol: "POWERGRID", exchange: "NSE" },
+  { id: "TITAN", name: "Titan Company", sector: "Consumer Durables & Retail", symbol: "TITAN", exchange: "NSE" },
+  { id: "ASIANPAINT", name: "Asian Paints", sector: "Consumer Durables & Retail", symbol: "ASIANPAINT", exchange: "NSE" },
+  { id: "TRENT", name: "Trent", sector: "Consumer Durables & Retail", symbol: "TRENT", exchange: "NSE" },
+  { id: "ETERNAL", name: "Eternal (Zomato / Blinkit)", sector: "Consumer Durables & Retail", symbol: "ETERNAL", exchange: "NSE" },
+  { id: "ADANIPORTS", name: "Adani Ports", sector: "Services & Aviation", symbol: "ADANIPORTS", exchange: "NSE" },
+  { id: "INDIGO", name: "IndiGo (InterGlobe)", sector: "Services & Aviation", symbol: "INDIGO", exchange: "NSE" },
+];
+
+const niftySupplyRaw = [
+  { id: "MOTHERSON", name: "Samvardhana Motherson", sector: "Automobile & Auto Components", listed: true, desc: "NSE: MOTHERSON • Wiring harnesses, vision systems, polymer modules" },
+  { id: "BOSCH", name: "Bosch Limited", sector: "Automobile & Auto Components", listed: true, desc: "NSE: BOSCHLTD • Fuel injection, ECUs, braking & powertrain electronics" },
+  { id: "UNOMINDA", name: "Uno Minda", sector: "Automobile & Auto Components", listed: true, desc: "NSE: UNOMINDA • Automotive switches, lighting, horns, alloy wheels" },
+  { id: "ENDURANCE", name: "Endurance Technologies", sector: "Automobile & Auto Components", listed: true, desc: "NSE: ENDURANCE • Aluminum die-casting, suspension, braking" },
+  { id: "BHARATFORG", name: "Bharat Forge", sector: "Automobile & Auto Components", listed: true, desc: "NSE: BHARATFORG • Forged crankshafts, chassis & axle components" },
+  { id: "SONACOMSTR", name: "Sona BLW (Sona Comstar)", sector: "Automobile & Auto Components", listed: true, desc: "NSE: SONACOMS • Differential assemblies & EV traction motors" },
+  { id: "SCHAEFFLER", name: "Schaeffler India", sector: "Automobile & Auto Components", listed: true, desc: "NSE: SCHAEFFLER • Engine bearings, clutches, transmission systems" },
+  { id: "SKFINDIA", name: "SKF India", sector: "Automobile & Auto Components", listed: true, desc: "NSE: SKFINDIA • Industrial & automotive bearings, seals" },
+  { id: "AISGLASS", name: "Asahi India Glass", sector: "Automobile & Auto Components", listed: true, desc: "NSE: ASAHIINDIA • Automotive windscreens & architectural glass" },
+  { id: "VARROC", name: "Varroc Engineering", sector: "Automobile & Auto Components", listed: true, desc: "NSE: VARROC • Exterior lighting & polymer components" },
+  { id: "GABRIEL", name: "Gabriel India", sector: "Automobile & Auto Components", listed: true, desc: "NSE: GABRIEL • Shock absorbers & ride control systems" },
+  { id: "SUBROS", name: "Subros", sector: "Automobile & Auto Components", listed: true, desc: "NSE: SUBROS • Automotive HVAC & thermal cooling systems" },
+  { id: "JTEKTINDIA", name: "JTEKT India", sector: "Automobile & Auto Components", listed: true, desc: "NSE: JTEKTINDIA • Hydraulic & electric power steering systems" },
+  { id: "RANEHOLD", name: "Rane Holdings", sector: "Automobile & Auto Components", listed: true, desc: "NSE: RANEHOLDIN • Steering columns, valves, occupant safety" },
+  { id: "TACO", name: "Tata AutoComp Systems (TACO)", sector: "Automobile & Auto Components", listed: false, desc: "Unlisted Tata Captive Tier-1 • Interiors, composites, EV battery packs" },
+  { id: "ANANDAUTO", name: "Anand Automotive Pvt Ltd", sector: "Automobile & Auto Components", listed: false, desc: "Unlisted Group • Brakes, filters, axles, sealing solutions" },
+  { id: "BRAKESINDIA", name: "Brakes India Pvt Ltd", sector: "Automobile & Auto Components", listed: false, desc: "Unlisted (TVS Group) • Hydraulic braking systems & iron castings" },
+  { id: "DENSOINDIA", name: "Denso India Pvt Ltd", sector: "Automobile & Auto Components", listed: false, desc: "Unlisted Subsidiary • Thermal systems, compressors, radiators" },
+  { id: "DIVISLAB", name: "Divi's Laboratories", sector: "Healthcare & Pharma", listed: true, desc: "NSE: DIVISLAB • Custom synthesis APIs & pharma intermediates" },
+  { id: "AUROBINDO", name: "Aurobindo Pharma", sector: "Healthcare & Pharma", listed: true, desc: "NSE: AUROPHARMA • Generic APIs, penicillin & cephalosporin inputs" },
+  { id: "LAURUSLAB", name: "Laurus Labs", sector: "Healthcare & Pharma", listed: true, desc: "NSE: LAURUSLABS • ARV, oncology & CDMO API synthesis" },
+  { id: "GRANULES", name: "Granules India", sector: "Healthcare & Pharma", listed: true, desc: "NSE: GRANULES • Active pharmaceutical ingredients & PFI" },
+  { id: "MEDIASSIST", name: "Medi Assist Healthcare", sector: "Healthcare & Pharma", listed: true, desc: "NSE: MEDIASSIST • Health insurance TPA & cashless hospital adjudication" },
+  { id: "ICICILOMBARD", name: "ICICI Lombard", sector: "Financial Services", listed: true, desc: "NSE: ICICIGI • Health insurer & hospital cashless network" },
+  { id: "AKNAMED", name: "Aknamed (Pharmeasy Group)", sector: "Healthcare & Pharma", listed: false, desc: "Unlisted • Cloud-based hospital medical supply procurement" },
+  { id: "APOLLO_SC", name: "Apollo Supply Chain (ALS)", sector: "Logistics", listed: false, desc: "Unlisted • Cold-chain healthcare & pharma 3PL warehousing" },
+  { id: "BPCL", name: "Bharat Petroleum (BPCL)", sector: "Oil, Gas & Energy", listed: true, desc: "NSE: BPCL • Refining, ATF aviation fuel & petroleum distribution" },
+  { id: "IOCL", name: "Indian Oil Corp (IOCL)", sector: "Oil, Gas & Energy", listed: true, desc: "NSE: IOC • Refining, pipelines & ATF aviation fuel supply" },
+  { id: "BHEL", name: "Bharat Heavy Electricals (BHEL)", sector: "Capital Goods & Construction", listed: true, desc: "NSE: BHEL • Boilers, steam turbines, transformers, UHVDC equipment" },
+  { id: "SIEMENS_IND", name: "Siemens India", sector: "Capital Goods & Construction", listed: true, desc: "NSE: SIEMENS • Industrial turbines, switchgear, grid automation" },
+  { id: "ABB_IND", name: "ABB India", sector: "Capital Goods & Construction", listed: true, desc: "NSE: ABB • Electrification, motors, drives & plant automation" },
+  { id: "HITACHI_ENR", name: "Hitachi Energy India", sector: "Power", listed: true, desc: "NSE: POWERINDIA • HVDC converter stations & high-voltage grid gear" },
+  { id: "THERMAX", name: "Thermax", sector: "Capital Goods & Construction", listed: true, desc: "NSE: THERMAX • Industrial boilers, heaters, water treatment" },
+  { id: "BEML", name: "BEML Limited", sector: "Capital Goods & Construction", listed: true, desc: "NSE: BEML • Heavy mining dumpers, excavators & rail equipment" },
+  { id: "JINDALSAW", name: "Jindal SAW", sector: "Metals & Mining", listed: true, desc: "NSE: JINDALSAW • Seamless & SAW heavy pipes for oil & gas" },
+  { id: "AMBUJACEMENT", name: "Ambuja Cements", sector: "Capital Goods & Construction", listed: true, desc: "NSE: AMBUJACEM • Cement & building materials (Adani Group)" },
+  { id: "ACCLTD", name: "ACC Limited", sector: "Capital Goods & Construction", listed: true, desc: "NSE: ACC • Cement & ready-mix concrete" },
+  { id: "HALIND", name: "Hindustan Aeronautics (HAL)", sector: "Capital Goods & Construction", listed: true, desc: "NSE: HAL • Aerospace & defense manufacturing partner" },
+  { id: "SANSERA", name: "Sansera Engineering", sector: "Capital Goods & Construction", listed: true, desc: "NSE: SANSERA • High-precision aerospace & auto components" },
+  { id: "AZADENG", name: "Azad Engineering", sector: "Capital Goods & Construction", listed: true, desc: "NSE: AZAD • Precision forged & machined turbine/defense parts" },
+  { id: "PIDILITE", name: "Pidilite Industries", sector: "Chemicals & Packaging", listed: true, desc: "NSE: PIDILITIND • Adhesives, sealants, construction chemicals" },
+  { id: "MOLDTEK", name: "Mold-Tek Packaging", sector: "Chemicals & Packaging", listed: true, desc: "NSE: MOLDTKPAC • Rigid plastic pails & IML paint/food containers" },
+  { id: "TCPLPACK", name: "TCPL Packaging", sector: "Chemicals & Packaging", listed: true, desc: "NSE: TCPLPACK • Folding cartons, paperboard & flexible packaging" },
+  { id: "TATACHEM", name: "Tata Chemicals", sector: "Chemicals & Packaging", listed: true, desc: "NSE: TATACHEM • Soda ash, specialty chemicals & salt evaporation" },
+  { id: "PPGASIAN", name: "PPG Asian Paints Pvt Ltd", sector: "Chemicals & Packaging", listed: false, desc: "Unlisted 50:50 JV • Automotive, industrial & protective coatings" },
+  { id: "KARIGAR_NET", name: "Tanishq Karigar Workshops", sector: "Consumer Durables & Retail", listed: false, desc: "Unlisted Artisan Network • Handcrafted gold & diamond jewelry vendors" },
+  { id: "APPAREL_MSME", name: "Tirupur & Surat Apparel MSMEs", sector: "Consumer Durables & Retail", listed: false, desc: "Unlisted Textile Cluster • Cut-and-sew suppliers for Westside & Zudio" },
+  { id: "TEA_ESTATES", name: "Assam & Nilgiri Tea Estates", sector: "FMCG", listed: false, desc: "Unlisted Plantations • Tea & coffee grower co-operatives" },
+  { id: "AGRI_FPOS", name: "Agri-FPOs & Dairy Co-ops", sector: "FMCG", listed: false, desc: "Unlisted Farm Networks • Direct wheat, dairy, spice & leaf procurement" },
+  { id: "HYPERPURE", name: "Hyperpure & Blinkit Dark Stores", sector: "Consumer Durables & Retail", listed: false, desc: "Unlisted Subsidiary Network • B2B kitchen supply & quick-commerce hubs" },
+  { id: "AEQUS", name: "Aequs Pvt Ltd", sector: "Capital Goods & Construction", listed: false, desc: "Unlisted • Aerospace & defense precision manufacturing ecosystem" },
+  { id: "BRITANNIA", name: "Britannia Industries", sector: "FMCG", listed: true, desc: "NSE: BRITANNIA • Packaged bakery & dairy sold across retail channels" },
+  { id: "TVSSCL", name: "TVS Supply Chain Solutions", sector: "Logistics", listed: true, desc: "NSE: TVSSCS • Integrated 3PL, warehousing & aftermarket logistics" },
+  { id: "MAHLOG", name: "Mahindra Logistics", sector: "Logistics", listed: true, desc: "NSE: MAHLOG • Enterprise 3PL, freight forwarding & warehousing" },
+  { id: "DELHIVERY", name: "Delhivery", sector: "Logistics", listed: true, desc: "NSE: DELHIVERY • Express parcel, B2B freight & fulfillment" },
+  { id: "BLUEDART", name: "Blue Dart Express", sector: "Logistics", listed: true, desc: "NSE: BLUEDART • Express air & ground distribution" },
+  { id: "ALLCARGO", name: "Allcargo Logistics", sector: "Logistics", listed: true, desc: "NSE: ALLCARGO • Multimodal container freight & CFS" },
+  { id: "AIRWORKS", name: "Air Works India (MRO)", sector: "Services & Aviation", listed: false, desc: "Unlisted (Adani Defence) • Aircraft heavy checks & line maintenance" },
+  { id: "SAFE_SECURE", name: "Safe & Secure Logistics", sector: "Logistics", listed: false, desc: "Unlisted • Heavy-haul steel & industrial flatbed fleets" },
+  { id: "NETWORK18", name: "Network18 Media", sector: "Services & Aviation", listed: true, desc: "NSE: NETWORK18 • Digital, TV & media content subsidiary" },
+  { id: "NUCLEUS_SW", name: "Nucleus Software", sector: "Information Technology", listed: true, desc: "NSE: NUCLEUS • Enterprise lending & transaction banking software" },
+  { id: "WIPRO", name: "Wipro", sector: "Information Technology", listed: true, desc: "NSE: WIPRO • IT services, boundaryless data centers & cloud partner" },
+  { id: "CDSL", name: "CDSL", sector: "Financial Services", listed: true, desc: "NSE: CDSL • Securities depository & demat settlement partner" },
+  { id: "CAMS", name: "CAMS", sector: "Financial Services", listed: true, desc: "NSE: CAMS • Mutual fund RTA & Account Aggregator infrastructure" },
+  { id: "KFINTECH", name: "KFin Technologies", sector: "Financial Services", listed: true, desc: "NSE: KFINTECH • Registrar, transfer agent & investor servicing" },
+  { id: "JIOPLATFORMS", name: "Jio Platforms", sector: "Telecom", listed: false, desc: "Unlisted Subsidiary • Digital ecosystem, 5G telecom & cloud stack" },
+  { id: "JIOINFOCOMM", name: "Reliance Jio Infocomm", sector: "Telecom", listed: false, desc: "Unlisted Subsidiary • Nationwide 5G tower & fiber-optic infra" },
+  { id: "RELRETAIL", name: "Reliance Retail Ventures", sector: "Consumer Durables & Retail", listed: false, desc: "Unlisted Subsidiary • JioMart, Reliance Smart, Digital, Tira" },
+  { id: "RELSUPPLY", name: "Reliance Supply Solutions", sector: "Logistics", listed: false, desc: "Unlisted Subsidiary • Wholesale B2B fulfillment & retail logistics" },
+  { id: "RELLOGISTICS", name: "Reliance Logistics", sector: "Logistics", listed: false, desc: "Unlisted Subsidiary • Commercial fleets & multimodal distribution" },
+  { id: "ADDVERB", name: "Addverb Technologies", sector: "Information Technology", listed: false, desc: "Unlisted Subsidiary • Warehouse automation & robotics systems" },
+  { id: "JIO_BLACKROCK", name: "Jio BlackRock Asset Mgmt", sector: "Financial Services", listed: false, desc: "Unlisted 50:50 JV • Digital-first asset management & wealth tech" },
+  { id: "JIOPAYMENTS", name: "Jio Payment Solutions", sector: "Financial Services", listed: false, desc: "Unlisted Subsidiary • Merchant POS, Soundbox & UPI payment infra" },
+  { id: "BTPL", name: "BSE Technologies (BTPL)", sector: "Information Technology", listed: false, desc: "Unlisted Subsidiary • Exchange trading & IRRA contingency tech" },
+  { id: "FREECHARGE", name: "Freecharge", sector: "Financial Services", listed: false, desc: "Unlisted Subsidiary (Axis) • Merchant payment aggregation & fintech" },
+  { id: "BAJAJMARKETS", name: "Bajaj Finserv Direct (Markets)", sector: "Financial Services", listed: false, desc: "Unlisted Subsidiary • Open-architecture digital lending marketplace" },
+  { id: "PERFIOS", name: "Perfios", sector: "Information Technology", listed: false, desc: "Unlisted Fintech • Bank statement analytics & Account Aggregator" },
+  { id: "RAZORPAY", name: "Razorpay", sector: "Financial Services", listed: false, desc: "Unlisted Fintech • Payment gateway, UPI autopay & payouts" },
+  { id: "CASHFREE", name: "Cashfree Payments", sector: "Financial Services", listed: false, desc: "Unlisted Fintech • Payment aggregation & instant disbursal APIs" },
+  { id: "JUSPAY", name: "Juspay", sector: "Financial Services", listed: false, desc: "Unlisted Fintech • High-throughput UPI & checkout orchestration" },
+  { id: "DIGIO", name: "Digio", sector: "Information Technology", listed: false, desc: "Unlisted RegTech • Aadhaar e-KYC, e-Sign & automated onboarding" },
+  { id: "LEEGALITY", name: "Leegality", sector: "Information Technology", listed: false, desc: "Unlisted RegTech • Digital e-stamping & document execution infra" },
+  { id: "FINBOX", name: "FinBox", sector: "Financial Services", listed: false, desc: "Unlisted Fintech • Embedded credit underwriting & co-lending APIs" },
+  { id: "YUBI", name: "Yubi (CredAvenue)", sector: "Financial Services", listed: false, desc: "Unlisted Fintech • Enterprise debt placement & co-lending infra" },
+  { id: "VEEFIN", name: "Veefin Solutions", sector: "Financial Services", listed: true, desc: "BSE Listed • White-labeled supply chain finance (SCF) software" },
+  { id: "QUALCOMM", name: "Qualcomm", sector: "Technology Partners", listed: true, global: true, desc: "Global (NASDAQ) • 5G RAN chipsets & semiconductor platforms" },
+  { id: "ERICSSON", name: "Ericsson", sector: "Technology Partners", listed: true, global: true, desc: "Global (NASDAQ) • 5G radio access & core telecom gear" },
+  { id: "NOKIA_NW", name: "Nokia Networks", sector: "Technology Partners", listed: true, global: true, desc: "Global (NYSE) • 5G RAN equipment & optical transport" },
+  { id: "GOOGLE", name: "Google (GCP / Maps)", sector: "Technology Partners", listed: true, global: true, desc: "Global (NASDAQ) • Cloud, Android, Maps geolocation APIs" },
+  { id: "META", name: "Meta Platforms", sector: "Technology Partners", listed: true, global: true, desc: "Global (NASDAQ) • JioMart WhatsApp commerce & digital platforms" },
+  { id: "AWS", name: "Amazon Web Services", sector: "Technology Partners", listed: true, global: true, desc: "Global (NASDAQ) • Hyperscale cloud infrastructure & AI" },
+  { id: "MSFT_AZURE", name: "Microsoft Azure", sector: "Technology Partners", listed: true, global: true, desc: "Global (NASDAQ) • Enterprise cloud, Copilot AI & ERP hosting" },
+  { id: "SAP_GLOBAL", name: "SAP", sector: "Technology Partners", listed: true, global: true, desc: "Global (NYSE) • S/4HANA ERP & digital supply chain suites" },
+  { id: "ORACLE_G", name: "Oracle", sector: "Technology Partners", listed: true, global: true, desc: "Global (NYSE) • Cloud ERP, FLEXCUBE banking & database" },
+  { id: "SALESFORCE", name: "Salesforce", sector: "Technology Partners", listed: true, global: true, desc: "Global (NYSE) • Enterprise CRM & customer cloud" },
+  { id: "SERVICENOW", name: "ServiceNow", sector: "Technology Partners", listed: true, global: true, desc: "Global (NYSE) • IT service management & workflow automation" },
+  { id: "ADOBE_G", name: "Adobe", sector: "Technology Partners", listed: true, global: true, desc: "Global (NASDAQ) • Digital experience & content platforms" },
+  { id: "INTEL_G", name: "Intel", sector: "Technology Partners", listed: true, global: true, desc: "Global (NASDAQ) • Data center silicon & AI PC platforms" },
+  { id: "BLACKROCK", name: "BlackRock (Aladdin)", sector: "Financial Services", listed: true, global: true, desc: "Global (NYSE) • Aladdin risk analytics & JV asset mgmt partner" },
+  { id: "FINASTRA", name: "Finastra", sector: "Technology Partners", listed: false, global: true, desc: "Global Private • Core trade finance & treasury software" },
+  { id: "RADISYS", name: "Radisys Corporation", sector: "Technology Partners", listed: false, global: true, desc: "Global Subsidiary • Open 5G & disaggregated RAN software" },
+  { id: "GIVAUDAN", name: "Givaudan", sector: "Chemicals & Packaging", listed: true, global: true, desc: "Global (SIX) • Flavors, seasonings & personal care fragrances" },
+  { id: "IFF_GLOBAL", name: "IFF (Intl Flavors & Fragrances)", sector: "Chemicals & Packaging", listed: true, global: true, desc: "Global (NYSE) • Taste, scent & nutrition ingredients" },
+  { id: "SYMRISE", name: "Symrise", sector: "Chemicals & Packaging", listed: true, global: true, desc: "Global (XETRA) • Cosmetic ingredients & flavorings" },
+  { id: "SAUDIARAMCO", name: "Saudi Aramco", sector: "Oil, Gas & Energy", listed: true, global: true, desc: "Global (Tadawul) • Crude oil feedstock for Jamnagar refinery" },
+  { id: "ADNOC", name: "ADNOC (UAE)", sector: "Oil, Gas & Energy", listed: false, global: true, desc: "Global State-Owned • Crude oil & petrochemical feedstock" },
+  { id: "HONEYWELL_UOP", name: "Honeywell UOP", sector: "Chemicals & Packaging", listed: true, global: true, desc: "Global (NASDAQ) • Refinery catalysts & process licensing" },
+  { id: "LUMMUSTECH", name: "Lummus Technology", sector: "Chemicals & Packaging", listed: false, global: true, desc: "Global Private • Petrochemical plant engineering & catalysts" },
+  { id: "DHLINDA", name: "DHL Supply Chain India", sector: "Logistics", listed: true, global: true, desc: "Global (DHL Group) • Cold-chain pharma & contract logistics" },
+  { id: "AIRBUS", name: "Airbus", sector: "Services & Aviation", listed: true, global: true, desc: "Global (EPA) • A320neo & A321neo commercial aircraft supplier" },
+  { id: "CFM_INTL", name: "CFM International", sector: "Services & Aviation", listed: false, global: true, desc: "Global JV (GE/Safran) • LEAP-1A aircraft engines" },
+  { id: "PRATT_WHITNEY", name: "Pratt & Whitney (RTX)", sector: "Services & Aviation", listed: true, global: true, desc: "Global (NYSE) • Geared Turbofan (GTF) aircraft engines" },
+  { id: "NAVTAIRE", name: "Navitaire (Amadeus)", sector: "Technology Partners", listed: true, global: true, desc: "Global • Airline passenger reservation & PSS software" },
+  { id: "HALLIBURTON", name: "Halliburton", sector: "Oil, Gas & Energy", listed: true, global: true, desc: "Global (NYSE) • Oilfield cementing, drilling & well completion" },
+  { id: "SLB", name: "SLB (Schlumberger)", sector: "Oil, Gas & Energy", listed: true, global: true, desc: "Global (NYSE) • Upstream reservoir tech & oilfield services" },
+  { id: "TECHNIPFMC", name: "TechnipFMC", sector: "Oil, Gas & Energy", listed: true, global: true, desc: "Global (NYSE) • Subsea & offshore energy engineering" },
+  { id: "FLSMIDTH", name: "FLSmidth", sector: "Capital Goods & Construction", listed: true, global: true, desc: "Global (CPH) • Cement kilns, crushers & grinding equipment" },
+  { id: "GE_HEALTHCARE", name: "GE HealthCare", sector: "Healthcare & Pharma", listed: true, global: true, desc: "Global (NASDAQ) • Diagnostic imaging, MRI & patient monitoring" },
+  { id: "SIEMENS_HEALTH", name: "Siemens Healthineers", sector: "Healthcare & Pharma", listed: true, global: true, desc: "Global (XETRA) • CT/MRI diagnostics & clinical lab systems" },
+  { id: "INTUITIVE_SURG", name: "Intuitive Surgical", sector: "Healthcare & Pharma", listed: true, global: true, desc: "Global (NASDAQ) • da Vinci robotic surgical systems" },
+  { id: "INDITEX_ZARA", name: "Inditex (Zara JV)", sector: "Consumer Durables & Retail", listed: true, global: true, desc: "Global (BME) • Zara & Massimo Dutti India retail JV" },
+];
+
+const niftyLinksRaw = [
+  { source: "MOTHERSON", target: "MARUTI", type: "supplier", label: "Wiring harnesses, mirrors" },
+  { source: "BOSCH", target: "MARUTI", type: "supplier", label: "Fuel injection, ECUs" },
+  { source: "UNOMINDA", target: "MARUTI", type: "supplier", label: "Lighting, switches" },
+  { source: "ENDURANCE", target: "MARUTI", type: "supplier", label: "Die-cast, braking" },
+  { source: "AISGLASS", target: "MARUTI", type: "supplier", label: "Automotive glass" },
+  { source: "SUBROS", target: "MARUTI", type: "supplier", label: "HVAC, air conditioning" },
+  { source: "JTEKTINDIA", target: "MARUTI", type: "supplier", label: "Steering systems" },
+  { source: "RANEHOLD", target: "MARUTI", type: "supplier", label: "Steering, occupant safety" },
+  { source: "SCHAEFFLER", target: "MARUTI", type: "supplier", label: "Bearings, clutches" },
+  { source: "SKFINDIA", target: "MARUTI", type: "supplier", label: "Bearings, seals" },
+  { source: "DENSOINDIA", target: "MARUTI", type: "supplier", label: "Thermal management" },
+  { source: "ANANDAUTO", target: "MARUTI", type: "supplier", label: "Brakes, filters" },
+  { source: "MOTHERSON", target: "TATAMOTORS", type: "supplier", label: "Wiring, polymer modules" },
+  { source: "BOSCH", target: "TATAMOTORS", type: "supplier", label: "Electronics, fuel systems" },
+  { source: "UNOMINDA", target: "TATAMOTORS", type: "supplier", label: "Lighting, infotainment" },
+  { source: "BHARATFORG", target: "TATAMOTORS", type: "supplier", label: "Forged chassis parts" },
+  { source: "TACO", target: "TATAMOTORS", type: "subsidiary", label: "Captive Tier-1, EV batteries" },
+  { source: "SONACOMSTR", target: "TATAMOTORS", type: "supplier", label: "Drivetrain, EV motors" },
+  { source: "AISGLASS", target: "TATAMOTORS", type: "supplier", label: "Automotive glass" },
+  { source: "VARROC", target: "TATAMOTORS", type: "supplier", label: "Exterior lighting" },
+  { source: "BRAKESINDIA", target: "TATAMOTORS", type: "supplier", label: "Braking systems" },
+  { source: "RANEHOLD", target: "TATAMOTORS", type: "supplier", label: "Steering components" },
+  { source: "MOTHERSON", target: "M&M", type: "supplier", label: "Wiring, vision systems" },
+  { source: "BOSCH", target: "M&M", type: "supplier", label: "Powertrain electronics" },
+  { source: "BHARATFORG", target: "M&M", type: "supplier", label: "Forged components" },
+  { source: "ENDURANCE", target: "M&M", type: "supplier", label: "Suspension, casting" },
+  { source: "GABRIEL", target: "M&M", type: "supplier", label: "Shock absorbers" },
+  { source: "SONACOMSTR", target: "M&M", type: "supplier", label: "Differential gears" },
+  { source: "MOTHERSON", target: "BAJAJ-AUTO", type: "supplier", label: "Wiring harnesses" },
+  { source: "ENDURANCE", target: "BAJAJ-AUTO", type: "supplier", label: "Casting, braking" },
+  { source: "VARROC", target: "BAJAJ-AUTO", type: "supplier", label: "Lighting, polymer" },
+  { source: "BOSCH", target: "BAJAJ-AUTO", type: "supplier", label: "Fuel injection, ABS" },
+  { source: "GABRIEL", target: "BAJAJ-AUTO", type: "supplier", label: "Front forks, shocks" },
+  { source: "MOTHERSON", target: "EICHERMOT", type: "supplier", label: "Wiring harnesses" },
+  { source: "BOSCH", target: "EICHERMOT", type: "supplier", label: "Electronics, injection" },
+  { source: "GABRIEL", target: "EICHERMOT", type: "supplier", label: "Shock absorbers" },
+  { source: "BHARATFORG", target: "EICHERMOT", type: "supplier", label: "Commercial powertrain" },
+  { source: "JIOPLATFORMS", target: "RELIANCE", type: "subsidiary", label: "Digital services arm" },
+  { source: "JIOINFOCOMM", target: "JIOPLATFORMS", type: "subsidiary", label: "Telecom infra" },
+  { source: "RELRETAIL", target: "RELIANCE", type: "subsidiary", label: "Retail arm" },
+  { source: "RELSUPPLY", target: "RELRETAIL", type: "subsidiary", label: "Supply chain logistics" },
+  { source: "RELLOGISTICS", target: "RELIANCE", type: "subsidiary", label: "Fleet & distribution" },
+  { source: "NETWORK18", target: "RELIANCE", type: "subsidiary", label: "Media arm" },
+  { source: "RADISYS", target: "JIOPLATFORMS", type: "subsidiary", label: "5G open RAN software" },
+  { source: "ADDVERB", target: "RELRETAIL", type: "subsidiary", label: "Warehouse robotics" },
+  { source: "QUALCOMM", target: "JIOPLATFORMS", type: "partner", label: "5G chipsets" },
+  { source: "ERICSSON", target: "JIOPLATFORMS", type: "partner", label: "5G RAN equipment" },
+  { source: "NOKIA_NW", target: "JIOPLATFORMS", type: "partner", label: "Network gear" },
+  { source: "GOOGLE", target: "JIOPLATFORMS", type: "partner", label: "Cloud & Android" },
+  { source: "META", target: "JIOPLATFORMS", type: "partner", label: "WhatsApp commerce" },
+  { source: "SAUDIARAMCO", target: "RELIANCE", type: "supplier", label: "Crude oil supply" },
+  { source: "ADNOC", target: "RELIANCE", type: "supplier", label: "Crude oil feedstock" },
+  { source: "HONEYWELL_UOP", target: "RELIANCE", type: "supplier", label: "Refinery catalysts" },
+  { source: "LUMMUSTECH", target: "RELIANCE", type: "supplier", label: "Petrochemical licensing" },
+  { source: "HINDUNILVR", target: "RELRETAIL", type: "customer", label: "FMCG distribution" },
+  { source: "NESTLEIND", target: "RELRETAIL", type: "customer", label: "FMCG distribution" },
+  { source: "ITC", target: "RELRETAIL", type: "customer", label: "FMCG distribution" },
+  { source: "BRITANNIA", target: "RELRETAIL", type: "customer", label: "Packaged food retail" },
+  { source: "TATACONSUM", target: "RELRETAIL", type: "customer", label: "Beverages & staples" },
+  { source: "ERICSSON", target: "BHARTIARTL", type: "partner", label: "Network equipment" },
+  { source: "NOKIA_NW", target: "BHARTIARTL", type: "partner", label: "5G RAN" },
+  { source: "QUALCOMM", target: "BHARTIARTL", type: "partner", label: "5G chipsets" },
+  { source: "AWS", target: "BHARTIARTL", type: "partner", label: "Cloud & edge infra" },
+  { source: "TCS", target: "BHARTIARTL", type: "partner", label: "IT & billing systems" },
+  { source: "AWS", target: "TCS", type: "partner", label: "Cloud alliance" },
+  { source: "MSFT_AZURE", target: "TCS", type: "partner", label: "Cloud & AI alliance" },
+  { source: "GOOGLE", target: "TCS", type: "partner", label: "GCP alliance" },
+  { source: "SAP_GLOBAL", target: "TCS", type: "partner", label: "ERP implementation" },
+  { source: "ORACLE_G", target: "TCS", type: "partner", label: "Enterprise apps" },
+  { source: "SALESFORCE", target: "TCS", type: "partner", label: "CRM solutions" },
+  { source: "SERVICENOW", target: "TCS", type: "partner", label: "ITSM partner" },
+  { source: "AWS", target: "INFY", type: "partner", label: "Premier consulting" },
+  { source: "MSFT_AZURE", target: "INFY", type: "partner", label: "Cloud partner" },
+  { source: "SAP_GLOBAL", target: "INFY", type: "partner", label: "RISE with SAP" },
+  { source: "SALESFORCE", target: "INFY", type: "partner", label: "CRM partner" },
+  { source: "ADOBE_G", target: "INFY", type: "partner", label: "Digital experience" },
+  { source: "SERVICENOW", target: "INFY", type: "partner", label: "Workflow partner" },
+  { source: "AWS", target: "HCLTECH", type: "partner", label: "Premier partner" },
+  { source: "MSFT_AZURE", target: "HCLTECH", type: "partner", label: "Cloud partner" },
+  { source: "SAP_GLOBAL", target: "HCLTECH", type: "partner", label: "S/4HANA partner" },
+  { source: "SALESFORCE", target: "HCLTECH", type: "partner", label: "CRM partner" },
+  { source: "SERVICENOW", target: "HCLTECH", type: "partner", label: "ITSM partner" },
+  { source: "AWS", target: "TECHM", type: "partner", label: "Cloud partner" },
+  { source: "MSFT_AZURE", target: "TECHM", type: "partner", label: "Cloud partner" },
+  { source: "SAP_GLOBAL", target: "TECHM", type: "partner", label: "ERP partner" },
+  { source: "SERVICENOW", target: "TECHM", type: "partner", label: "ITSM partner" },
+  { source: "INTEL_G", target: "TECHM", type: "partner", label: "5G & AI silicon" },
+  { source: "DIVISLAB", target: "SUNPHARMA", type: "supplier", label: "APIs & intermediates" },
+  { source: "LAURUSLAB", target: "SUNPHARMA", type: "supplier", label: "API synthesis" },
+  { source: "GRANULES", target: "SUNPHARMA", type: "supplier", label: "Intermediates" },
+  { source: "DIVISLAB", target: "CIPLA", type: "supplier", label: "Custom synthesis APIs" },
+  { source: "AUROBINDO", target: "CIPLA", type: "supplier", label: "Generic APIs" },
+  { source: "LAURUSLAB", target: "CIPLA", type: "supplier", label: "ARV, oncology APIs" },
+  { source: "DIVISLAB", target: "DRREDDY", type: "supplier", label: "APIs & intermediates" },
+  { source: "GRANULES", target: "DRREDDY", type: "supplier", label: "Finished dosages" },
+  { source: "TCPLPACK", target: "SUNPHARMA", type: "supplier", label: "Pharma cartons" },
+  { source: "TCPLPACK", target: "CIPLA", type: "supplier", label: "Folding cartons" },
+  { source: "DHLINDA", target: "SUNPHARMA", type: "logistics", label: "Cold chain pharma" },
+  { source: "DHLINDA", target: "CIPLA", type: "logistics", label: "Cold chain distribution" },
+  { source: "DHLINDA", target: "DRREDDY", type: "logistics", label: "Pharma logistics" },
+  { source: "BLUEDART", target: "APOLLOHOSP", type: "logistics", label: "Medical express" },
+  { source: "APOLLO_SC", target: "APOLLOHOSP", type: "logistics", label: "Cold-chain 3PL" },
+  { source: "AKNAMED", target: "APOLLOHOSP", type: "supplier", label: "Medical procurement" },
+  { source: "ORACLE_G", target: "APOLLOHOSP", type: "partner", label: "Cloud ERP / HCM" },
+  { source: "GE_HEALTHCARE", target: "APOLLOHOSP", type: "supplier", label: "Diagnostic imaging" },
+  { source: "SIEMENS_HEALTH", target: "MAXHEALTH", type: "supplier", label: "MRI, CT & clinical lab" },
+  { source: "GE_HEALTHCARE", target: "MAXHEALTH", type: "supplier", label: "Imaging & monitoring" },
+  { source: "INTUITIVE_SURG", target: "MAXHEALTH", type: "supplier", label: "da Vinci robotic surgery" },
+  { source: "AKNAMED", target: "MAXHEALTH", type: "supplier", label: "Hospital consumables" },
+  { source: "MEDIASSIST", target: "MAXHEALTH", type: "partner", label: "Cashless TPA adjudication" },
+  { source: "MEDIASSIST", target: "APOLLOHOSP", type: "partner", label: "Cashless TPA network" },
+  { source: "ICICILOMBARD", target: "MAXHEALTH", type: "partner", label: "Cashless insurance" },
+  { source: "SUNPHARMA", target: "APOLLOHOSP", type: "supplier", label: "Hospital formulations" },
+  { source: "CIPLA", target: "MAXHEALTH", type: "supplier", label: "Critical care drugs" },
+  { source: "GIVAUDAN", target: "HINDUNILVR", type: "supplier", label: "Fragrances & flavors" },
+  { source: "IFF_GLOBAL", target: "HINDUNILVR", type: "supplier", label: "Scent & nutrition" },
+  { source: "SYMRISE", target: "HINDUNILVR", type: "supplier", label: "Cosmetic ingredients" },
+  { source: "TCPLPACK", target: "HINDUNILVR", type: "supplier", label: "Folding cartons" },
+  { source: "MOLDTEK", target: "HINDUNILVR", type: "supplier", label: "Plastic containers" },
+  { source: "GIVAUDAN", target: "ITC", type: "supplier", label: "Flavors for foods" },
+  { source: "IFF_GLOBAL", target: "ITC", type: "supplier", label: "Flavor profiles" },
+  { source: "TCPLPACK", target: "ITC", type: "supplier", label: "Packaging cartons" },
+  { source: "AGRI_FPOS", target: "ITC", type: "supplier", label: "Wheat, spices, tobacco" },
+  { source: "GIVAUDAN", target: "NESTLEIND", type: "supplier", label: "Seasonings, flavors" },
+  { source: "IFF_GLOBAL", target: "NESTLEIND", type: "supplier", label: "Taste ingredients" },
+  { source: "TCPLPACK", target: "NESTLEIND", type: "supplier", label: "Carton packaging" },
+  { source: "AGRI_FPOS", target: "NESTLEIND", type: "supplier", label: "Dairy & coffee beans" },
+  { source: "TEA_ESTATES", target: "TATACONSUM", type: "supplier", label: "Assam & Nilgiri tea" },
+  { source: "TATACHEM", target: "TATACONSUM", type: "supplier", label: "Vacuum-evaporated salt" },
+  { source: "TCPLPACK", target: "TATACONSUM", type: "supplier", label: "Tea & staple cartons" },
+  { source: "AGRI_FPOS", target: "TATACONSUM", type: "supplier", label: "Pulses & spices" },
+  { source: "MOLDTEK", target: "ASIANPAINT", type: "supplier", label: "IML paint pails" },
+  { source: "PPGASIAN", target: "ASIANPAINT", type: "subsidiary", label: "Industrial coatings JV" },
+  { source: "TATACHEM", target: "ASIANPAINT", type: "supplier", label: "Chemical feedstocks" },
+  { source: "PIDILITE", target: "ASIANPAINT", type: "supplier", label: "Specialty adhesives" },
+  { source: "DELHIVERY", target: "ASIANPAINT", type: "logistics", label: "Distribution" },
+  { source: "KARIGAR_NET", target: "TITAN", type: "supplier", label: "Handcrafted jewelry" },
+  { source: "TCPLPACK", target: "TITAN", type: "supplier", label: "Luxury watch/gift cartons" },
+  { source: "BLUEDART", target: "TITAN", type: "logistics", label: "Secure express delivery" },
+  { source: "TITAN", target: "TATACONSUM", type: "partner", label: "Tata Group synergy" },
+  { source: "APPAREL_MSME", target: "TRENT", type: "supplier", label: "Zudio & Westside apparel" },
+  { source: "INDITEX_ZARA", target: "TRENT", type: "partner", label: "Zara India retail JV" },
+  { source: "BLUEDART", target: "TRENT", type: "logistics", label: "Fashion logistics" },
+  { source: "HYPERPURE", target: "ETERNAL", type: "subsidiary", label: "B2B kitchen & Blinkit" },
+  { source: "AWS", target: "ETERNAL", type: "partner", label: "Cloud infrastructure" },
+  { source: "GOOGLE", target: "ETERNAL", type: "partner", label: "Maps geolocation & cloud" },
+  { source: "RAZORPAY", target: "ETERNAL", type: "partner", label: "Checkout & UPI payments" },
+  { source: "AGRI_FPOS", target: "HYPERPURE", type: "supplier", label: "Fresh produce & staples" },
+  { source: "BRITANNIA", target: "HYPERPURE", type: "customer", label: "Quick-commerce FMCG" },
+  { source: "MAHLOG", target: "HINDUNILVR", type: "logistics", label: "Supply chain, freight" },
+  { source: "MAHLOG", target: "ITC", type: "logistics", label: "Supply chain mgmt" },
+  { source: "DELHIVERY", target: "HINDUNILVR", type: "logistics", label: "Last-mile delivery" },
+  { source: "DELHIVERY", target: "ITC", type: "logistics", label: "Parcel distribution" },
+  { source: "BLUEDART", target: "NESTLEIND", type: "logistics", label: "Express distribution" },
+  { source: "TATASTEEL", target: "TATAMOTORS", type: "supplier", label: "Automotive steel" },
+  { source: "JSWSTEEL", target: "TATAMOTORS", type: "supplier", label: "Steel supply" },
+  { source: "TATASTEEL", target: "LT", type: "supplier", label: "Structural steel" },
+  { source: "JSWSTEEL", target: "LT", type: "supplier", label: "Construction steel" },
+  { source: "TATASTEEL", target: "MARUTI", type: "supplier", label: "Auto-grade steel" },
+  { source: "JSWSTEEL", target: "MARUTI", type: "supplier", label: "Flat & coated steel" },
+  { source: "HINDALCO", target: "MARUTI", type: "supplier", label: "Aluminum components" },
+  { source: "HINDALCO", target: "TATAMOTORS", type: "supplier", label: "Aluminum parts" },
+  { source: "HINDALCO", target: "LT", type: "supplier", label: "Copper & aluminum busbars" },
+  { source: "COALINDIA", target: "NTPC", type: "supplier", label: "Thermal coal" },
+  { source: "COALINDIA", target: "TATASTEEL", type: "supplier", label: "Coking coal" },
+  { source: "COALINDIA", target: "JSWSTEEL", type: "supplier", label: "Coking coal" },
+  { source: "COALINDIA", target: "HINDALCO", type: "supplier", label: "Captive power coal" },
+  { source: "COALINDIA", target: "ULTRACEMCO", type: "supplier", label: "Kiln fuel coal" },
+  { source: "BEML", target: "COALINDIA", type: "supplier", label: "Mining dumpers & dozers" },
+  { source: "ABB_IND", target: "COALINDIA", type: "supplier", label: "Mining drives & automation" },
+  { source: "SAFE_SECURE", target: "TATASTEEL", type: "logistics", label: "Heavy steel fleet" },
+  { source: "SAFE_SECURE", target: "JSWSTEEL", type: "logistics", label: "Steel coil transport" },
+  { source: "SAFE_SECURE", target: "HINDALCO", type: "logistics", label: "Metal haulage" },
+  { source: "ADANIPORTS", target: "TATASTEEL", type: "logistics", label: "Coking coal & export port" },
+  { source: "ADANIPORTS", target: "JSWSTEEL", type: "logistics", label: "Dry bulk port handling" },
+  { source: "JINDALSAW", target: "ONGC", type: "supplier", label: "Heavy pipes" },
+  { source: "HALLIBURTON", target: "ONGC", type: "supplier", label: "Drilling & well services" },
+  { source: "SLB", target: "ONGC", type: "supplier", label: "Reservoir & oilfield tech" },
+  { source: "TECHNIPFMC", target: "ONGC", type: "supplier", label: "Subsea offshore EPC" },
+  { source: "LT", target: "ONGC", type: "supplier", label: "Offshore platforms" },
+  { source: "BHEL", target: "ONGC", type: "partner", label: "Rigs & green hydrogen" },
+  { source: "TATASTEEL", target: "ULTRACEMCO", type: "supplier", label: "Plant structural steel" },
+  { source: "FLSMIDTH", target: "ULTRACEMCO", type: "supplier", label: "Cement kilns & crushers" },
+  { source: "THERMAX", target: "ULTRACEMCO", type: "supplier", label: "Waste heat recovery" },
+  { source: "ULTRACEMCO", target: "GRASIM", type: "subsidiary", label: "ABG group subsidiary" },
+  { source: "MOLDTEK", target: "GRASIM", type: "supplier", label: "Birla Opus paint pails" },
+  { source: "TATACHEM", target: "GRASIM", type: "supplier", label: "Industrial chemicals" },
+  { source: "AMBUJACEMENT", target: "LT", type: "supplier", label: "Cement supply" },
+  { source: "ACCLTD", target: "LT", type: "supplier", label: "Ready-mix concrete" },
+  { source: "ULTRACEMCO", target: "LT", type: "supplier", label: "Infrastructure cement" },
+  { source: "SANSERA", target: "BEL", type: "supplier", label: "Precision components" },
+  { source: "AZADENG", target: "BEL", type: "supplier", label: "Machined components" },
+  { source: "HALIND", target: "BEL", type: "partner", label: "Defense ecosystem" },
+  { source: "AEQUS", target: "BEL", type: "supplier", label: "Aerospace precision parts" },
+  { source: "BEL", target: "HALIND", type: "supplier", label: "Defense avionics" },
+  { source: "LT", target: "NTPC", type: "supplier", label: "EPC power plant construction" },
+  { source: "BHEL", target: "NTPC", type: "supplier", label: "Boilers & steam turbines" },
+  { source: "ABB_IND", target: "NTPC", type: "supplier", label: "Control instrumentation" },
+  { source: "SIEMENS_IND", target: "NTPC", type: "supplier", label: "Turbines & switchgear" },
+  { source: "LT", target: "POWERGRID", type: "supplier", label: "Transmission infra" },
+  { source: "BEL", target: "POWERGRID", type: "supplier", label: "Grid electronics" },
+  { source: "BHEL", target: "POWERGRID", type: "supplier", label: "UHVDC transformers" },
+  { source: "HITACHI_ENR", target: "POWERGRID", type: "supplier", label: "HVDC converter stations" },
+  { source: "SIEMENS_IND", target: "POWERGRID", type: "supplier", label: "GIS substations" },
+  { source: "TVSSCL", target: "TATAMOTORS", type: "logistics", label: "Aftermarket logistics" },
+  { source: "TVSSCL", target: "MARUTI", type: "logistics", label: "Parts distribution" },
+  { source: "TVSSCL", target: "M&M", type: "logistics", label: "Vehicle logistics" },
+  { source: "MAHLOG", target: "M&M", type: "logistics", label: "Enterprise supply chain" },
+  { source: "ADANIENT", target: "ADANIPORTS", type: "subsidiary", label: "Group entity" },
+  { source: "AMBUJACEMENT", target: "ADANIENT", type: "subsidiary", label: "Group cement arm" },
+  { source: "ACCLTD", target: "ADANIENT", type: "subsidiary", label: "Group cement arm" },
+  { source: "AIRWORKS", target: "ADANIENT", type: "subsidiary", label: "Adani Defence MRO" },
+  { source: "ALLCARGO", target: "ADANIPORTS", type: "logistics", label: "Container freight" },
+  { source: "AIRBUS", target: "INDIGO", type: "supplier", label: "A320neo / A321neo fleet" },
+  { source: "CFM_INTL", target: "INDIGO", type: "supplier", label: "LEAP-1A engines" },
+  { source: "PRATT_WHITNEY", target: "INDIGO", type: "supplier", label: "GTF aircraft engines" },
+  { source: "IOCL", target: "INDIGO", type: "supplier", label: "Aviation turbine fuel (ATF)" },
+  { source: "BPCL", target: "INDIGO", type: "supplier", label: "ATF fuel & farm" },
+  { source: "AIRWORKS", target: "INDIGO", type: "supplier", label: "Heavy checks & MRO" },
+  { source: "NAVTAIRE", target: "INDIGO", type: "partner", label: "Passenger reservations" },
+  { source: "VEEFIN", target: "HDFCBANK", type: "partner", label: "SCF workflows" },
+  { source: "YUBI", target: "HDFCBANK", type: "partner", label: "Co-lending platform" },
+  { source: "FINASTRA", target: "HDFCBANK", type: "partner", label: "Trade finance" },
+  { source: "PERFIOS", target: "HDFCBANK", type: "partner", label: "Bank statement analytics" },
+  { source: "RAZORPAY", target: "HDFCBANK", type: "partner", label: "UPI & payment gateway" },
+  { source: "VEEFIN", target: "ICICIBANK", type: "partner", label: "Digital lending" },
+  { source: "YUBI", target: "ICICIBANK", type: "partner", label: "Debt placement" },
+  { source: "NUCLEUS_SW", target: "ICICIBANK", type: "partner", label: "Lending software" },
+  { source: "PERFIOS", target: "ICICIBANK", type: "partner", label: "AA & credit profiling" },
+  { source: "INFY", target: "ICICIBANK", type: "partner", label: "Finacle core banking" },
+  { source: "VEEFIN", target: "SBIN", type: "partner", label: "SCF platform" },
+  { source: "YUBI", target: "SBIN", type: "partner", label: "Co-lending" },
+  { source: "FINASTRA", target: "SBIN", type: "partner", label: "Banking platform" },
+  { source: "TCS", target: "SBIN", type: "partner", label: "Core banking (BaNCS)" },
+  { source: "AWS", target: "SBIN", type: "partner", label: "Digital cloud workloads" },
+  { source: "PERFIOS", target: "KOTAKBANK", type: "partner", label: "Credit analytics" },
+  { source: "RAZORPAY", target: "KOTAKBANK", type: "partner", label: "Merchant & escrow APIs" },
+  { source: "JUSPAY", target: "KOTAKBANK", type: "partner", label: "UPI orchestration" },
+  { source: "AWS", target: "KOTAKBANK", type: "partner", label: "811 digital banking cloud" },
+  { source: "ORACLE_G", target: "KOTAKBANK", type: "partner", label: "Core banking database" },
+  { source: "FREECHARGE", target: "AXISBANK", type: "subsidiary", label: "Merchant payment arm" },
+  { source: "DIGIO", target: "AXISBANK", type: "partner", label: "e-KYC & e-Sign" },
+  { source: "LEEGALITY", target: "AXISBANK", type: "partner", label: "Digital e-stamping" },
+  { source: "PERFIOS", target: "AXISBANK", type: "partner", label: "Anumati AA analytics" },
+  { source: "AWS", target: "AXISBANK", type: "partner", label: "Open banking cloud" },
+  { source: "BAJFINANCE", target: "BAJAJFINSV", type: "subsidiary", label: "Lending subsidiary" },
+  { source: "BAJAJMARKETS", target: "BAJAJFINSV", type: "subsidiary", label: "Digital marketplace" },
+  { source: "RAZORPAY", target: "BAJFINANCE", type: "partner", label: "UPI autopay & EMI" },
+  { source: "JUSPAY", target: "BAJFINANCE", type: "partner", label: "Checkout orchestration" },
+  { source: "PERFIOS", target: "BAJFINANCE", type: "partner", label: "Automated underwriting" },
+  { source: "AWS", target: "BAJFINANCE", type: "partner", label: "Cloud infrastructure" },
+  { source: "SALESFORCE", target: "BAJAJFINSV", type: "partner", label: "Financial CRM" },
+  { source: "JIO_BLACKROCK", target: "JIOFIN", type: "subsidiary", label: "Asset management JV" },
+  { source: "JIOPAYMENTS", target: "JIOFIN", type: "subsidiary", label: "Merchant POS & Soundbox" },
+  { source: "BLACKROCK", target: "JIO_BLACKROCK", type: "partner", label: "Aladdin risk tech & JV" },
+  { source: "JIOPLATFORMS", target: "JIOFIN", type: "partner", label: "Cloud & app tech stack" },
+  { source: "KFINTECH", target: "JIO_BLACKROCK", type: "partner", label: "RTA investor servicing" },
+  { source: "FINBOX", target: "SHRIRAMFIN", type: "partner", label: "MSME credit decisioning" },
+  { source: "CASHFREE", target: "SHRIRAMFIN", type: "partner", label: "Instant loan disbursal" },
+  { source: "YUBI", target: "SHRIRAMFIN", type: "partner", label: "Co-lending & debt" },
+  { source: "DIGIO", target: "SHRIRAMFIN", type: "partner", label: "Rural digital e-KYC" },
+  { source: "TCS", target: "SHRIRAMFIN", type: "partner", label: "Enterprise IT systems" },
+  { source: "HDFCBANK", target: "HDFCLIFE", type: "partner", label: "Bancassurance channel" },
+  { source: "MEDIASSIST", target: "HDFCLIFE", type: "partner", label: "Health claims TPA" },
+  { source: "PERFIOS", target: "HDFCLIFE", type: "partner", label: "Digital underwriting" },
+  { source: "AWS", target: "HDFCLIFE", type: "partner", label: "InsurTech cloud" },
+  { source: "SBIN", target: "SBILIFE", type: "partner", label: "Bancassurance channel" },
+  { source: "TCS", target: "SBILIFE", type: "partner", label: "BaNCS insurance core" },
+  { source: "DIGIO", target: "SBILIFE", type: "partner", label: "Policy e-KYC & e-Sign" },
+  { source: "MSFT_AZURE", target: "SBILIFE", type: "partner", label: "Cloud & analytics" },
+  { source: "BTPL", target: "BSE", type: "subsidiary", label: "Exchange tech arm" },
+  { source: "CDSL", target: "BSE", type: "partner", label: "Depository settlement" },
+  { source: "AWS", target: "BTPL", type: "partner", label: "IRRA contingency cloud" },
+  { source: "CAMS", target: "BSE", type: "partner", label: "StAR MF RTA infra" },
+  { source: "TCS", target: "BSE", type: "partner", label: "Market infra tech" },
+  { source: "WIPRO", target: "BSE", type: "partner", label: "Data center & IT services" },
+];
+
+// ════════════════════════════════════════════════════════════
+//  DATASET 2: NASDAQ-100 (98 Anchors + 122 Suppliers + 334 Links)
+// ════════════════════════════════════════════════════════════
+const nasdaqAnchorsRaw = [
+  { id: "NVDA", name: "NVIDIA", sector: "Semiconductors & Hardware", symbol: "NVDA", exchange: "NASDAQ" },
+  { id: "AVGO", name: "Broadcom", sector: "Semiconductors & Hardware", symbol: "AVGO", exchange: "NASDAQ" },
+  { id: "AMD", name: "AMD", sector: "Semiconductors & Hardware", symbol: "AMD", exchange: "NASDAQ" },
+  { id: "INTC", name: "Intel", sector: "Semiconductors & Hardware", symbol: "INTC", exchange: "NASDAQ" },
+  { id: "QCOM", name: "Qualcomm", sector: "Semiconductors & Hardware", symbol: "QCOM", exchange: "NASDAQ" },
+  { id: "TXN", name: "Texas Instruments", sector: "Semiconductors & Hardware", symbol: "TXN", exchange: "NASDAQ" },
+  { id: "ADI", name: "Analog Devices", sector: "Semiconductors & Hardware", symbol: "ADI", exchange: "NASDAQ" },
+  { id: "MU", name: "Micron Technology", sector: "Semiconductors & Hardware", symbol: "MU", exchange: "NASDAQ" },
+  { id: "MRVL", name: "Marvell Technology", sector: "Semiconductors & Hardware", symbol: "MRVL", exchange: "NASDAQ" },
+  { id: "NXPI", name: "NXP Semiconductors", sector: "Semiconductors & Hardware", symbol: "NXPI", exchange: "NASDAQ" },
+  { id: "MCHP", name: "Microchip Technology", sector: "Semiconductors & Hardware", symbol: "MCHP", exchange: "NASDAQ" },
+  { id: "MPWR", name: "Monolithic Power Systems", sector: "Semiconductors & Hardware", symbol: "MPWR", exchange: "NASDAQ" },
+  { id: "ARM", name: "Arm Holdings", sector: "Semiconductors & Hardware", symbol: "ARM", exchange: "NASDAQ" },
+  { id: "ASML", name: "ASML Holding", sector: "Semiconductors & Hardware", symbol: "ASML", exchange: "NASDAQ" },
+  { id: "AMAT", name: "Applied Materials", sector: "Semiconductors & Hardware", symbol: "AMAT", exchange: "NASDAQ" },
+  { id: "LRCX", name: "Lam Research", sector: "Semiconductors & Hardware", symbol: "LRCX", exchange: "NASDAQ" },
+  { id: "KLAC", name: "KLA Corporation", sector: "Semiconductors & Hardware", symbol: "KLAC", exchange: "NASDAQ" },
+  { id: "TER", name: "Teradyne", sector: "Semiconductors & Hardware", symbol: "TER", exchange: "NASDAQ" },
+  { id: "ALAB", name: "Astera Labs", sector: "Semiconductors & Hardware", symbol: "ALAB", exchange: "NASDAQ" },
+  { id: "LITE", name: "Lumentum Holdings", sector: "Semiconductors & Hardware", symbol: "LITE", exchange: "NASDAQ" },
+  { id: "STX", name: "Seagate Technology", sector: "Semiconductors & Hardware", symbol: "STX", exchange: "NASDAQ" },
+  { id: "WDC", name: "Western Digital", sector: "Semiconductors & Hardware", symbol: "WDC", exchange: "NASDAQ" },
+  { id: "SNDK", name: "SanDisk", sector: "Semiconductors & Hardware", symbol: "SNDK", exchange: "NASDAQ" },
+  { id: "MSFT", name: "Microsoft", sector: "Cloud, AI & Software", symbol: "MSFT", exchange: "NASDAQ" },
+  { id: "GOOGL", name: "Alphabet (GOOGL / GOOG)", sector: "Cloud, AI & Software", symbol: "GOOGL", exchange: "NASDAQ" },
+  { id: "ADBE", name: "Adobe", sector: "Cloud, AI & Software", symbol: "ADBE", exchange: "NASDAQ" },
+  { id: "INTU", name: "Intuit", sector: "Cloud, AI & Software", symbol: "INTU", exchange: "NASDAQ" },
+  { id: "ADSK", name: "Autodesk", sector: "Cloud, AI & Software", symbol: "ADSK", exchange: "NASDAQ" },
+  { id: "SNPS", name: "Synopsys", sector: "Cloud, AI & Software", symbol: "SNPS", exchange: "NASDAQ" },
+  { id: "CDNS", name: "Cadence Design Systems", sector: "Cloud, AI & Software", symbol: "CDNS", exchange: "NASDAQ" },
+  { id: "WDAY", name: "Workday", sector: "Cloud, AI & Software", symbol: "WDAY", exchange: "NASDAQ" },
+  { id: "DDOG", name: "Datadog", sector: "Cloud, AI & Software", symbol: "DDOG", exchange: "NASDAQ" },
+  { id: "PLTR", name: "Palantir Technologies", sector: "Cloud, AI & Software", symbol: "PLTR", exchange: "NASDAQ" },
+  { id: "APP", name: "AppLovin", sector: "Cloud, AI & Software", symbol: "APP", exchange: "NASDAQ" },
+  { id: "CRWV", name: "CoreWeave", sector: "Cloud, AI & Software", symbol: "CRWV", exchange: "NASDAQ" },
+  { id: "NBIS", name: "Nebius Group", sector: "Cloud, AI & Software", symbol: "NBIS", exchange: "NASDAQ" },
+  { id: "CSCO", name: "Cisco Systems", sector: "Cloud, AI & Software", symbol: "CSCO", exchange: "NASDAQ" },
+  { id: "MSTR", name: "Strategy (MicroStrategy)", sector: "Cloud, AI & Software", symbol: "MSTR", exchange: "NASDAQ" },
+  { id: "ROP", name: "Roper Technologies", sector: "Cloud, AI & Software", symbol: "ROP", exchange: "NASDAQ" },
+  { id: "TRI", name: "Thomson Reuters", sector: "Cloud, AI & Software", symbol: "TRI", exchange: "NASDAQ" },
+  { id: "PANW", name: "Palo Alto Networks", sector: "Cybersecurity", symbol: "PANW", exchange: "NASDAQ" },
+  { id: "CRWD", name: "CrowdStrike", sector: "Cybersecurity", symbol: "CRWD", exchange: "NASDAQ" },
+  { id: "FTNT", name: "Fortinet", sector: "Cybersecurity", symbol: "FTNT", exchange: "NASDAQ" },
+  { id: "AAPL", name: "Apple", sector: "Consumer Tech & Media", symbol: "AAPL", exchange: "NASDAQ" },
+  { id: "META", name: "Meta Platforms", sector: "Consumer Tech & Media", symbol: "META", exchange: "NASDAQ" },
+  { id: "NFLX", name: "Netflix", sector: "Consumer Tech & Media", symbol: "NFLX", exchange: "NASDAQ" },
+  { id: "TTWO", name: "Take-Two Interactive", sector: "Consumer Tech & Media", symbol: "TTWO", exchange: "NASDAQ" },
+  { id: "ABNB", name: "Airbnb", sector: "Consumer Tech & Media", symbol: "ABNB", exchange: "NASDAQ" },
+  { id: "BKNG", name: "Booking Holdings", sector: "Consumer Tech & Media", symbol: "BKNG", exchange: "NASDAQ" },
+  { id: "AMGN", name: "Amgen", sector: "Healthcare & Biotech", symbol: "AMGN", exchange: "NASDAQ" },
+  { id: "GILD", name: "Gilead Sciences", sector: "Healthcare & Biotech", symbol: "GILD", exchange: "NASDAQ" },
+  { id: "VRTX", name: "Vertex Pharmaceuticals", sector: "Healthcare & Biotech", symbol: "VRTX", exchange: "NASDAQ" },
+  { id: "REGN", name: "Regeneron", sector: "Healthcare & Biotech", symbol: "REGN", exchange: "NASDAQ" },
+  { id: "ALNY", name: "Alnylam Pharmaceuticals", sector: "Healthcare & Biotech", symbol: "ALNY", exchange: "NASDAQ" },
+  { id: "MRNA", name: "Moderna", sector: "Healthcare & Biotech", symbol: "MRNA", exchange: "NASDAQ" },
+  { id: "ISRG", name: "Intuitive Surgical", sector: "Healthcare & Biotech", symbol: "ISRG", exchange: "NASDAQ" },
+  { id: "DXCM", name: "DexCom", sector: "Healthcare & Biotech", symbol: "DXCM", exchange: "NASDAQ" },
+  { id: "IDXX", name: "IDEXX Laboratories", sector: "Healthcare & Biotech", symbol: "IDXX", exchange: "NASDAQ" },
+  { id: "GEHC", name: "GE HealthCare", sector: "Healthcare & Biotech", symbol: "GEHC", exchange: "NASDAQ" },
+  { id: "AMZN", name: "Amazon.com", sector: "Retail & E-Commerce", symbol: "AMZN", exchange: "NASDAQ" },
+  { id: "WMT", name: "Walmart", sector: "Retail & E-Commerce", symbol: "WMT", exchange: "NASDAQ" },
+  { id: "COST", name: "Costco Wholesale", sector: "Retail & E-Commerce", symbol: "COST", exchange: "NASDAQ" },
+  { id: "SHOP", name: "Shopify", sector: "Retail & E-Commerce", symbol: "SHOP", exchange: "NASDAQ" },
+  { id: "MELI", name: "MercadoLibre", sector: "Retail & E-Commerce", symbol: "MELI", exchange: "NASDAQ" },
+  { id: "PDD", name: "PDD Holdings", sector: "Retail & E-Commerce", symbol: "PDD", exchange: "NASDAQ" },
+  { id: "DASH", name: "DoorDash", sector: "Retail & E-Commerce", symbol: "DASH", exchange: "NASDAQ" },
+  { id: "ROST", name: "Ross Stores", sector: "Retail & E-Commerce", symbol: "ROST", exchange: "NASDAQ" },
+  { id: "ORLY", name: "O'Reilly Automotive", sector: "Retail & E-Commerce", symbol: "ORLY", exchange: "NASDAQ" },
+  { id: "PEP", name: "PepsiCo", sector: "Food & Beverage", symbol: "PEP", exchange: "NASDAQ" },
+  { id: "MDLZ", name: "Mondelez International", sector: "Food & Beverage", symbol: "MDLZ", exchange: "NASDAQ" },
+  { id: "KDP", name: "Keurig Dr Pepper", sector: "Food & Beverage", symbol: "KDP", exchange: "NASDAQ" },
+  { id: "MNST", name: "Monster Beverage", sector: "Food & Beverage", symbol: "MNST", exchange: "NASDAQ" },
+  { id: "CCEP", name: "Coca-Cola Europacific", sector: "Food & Beverage", symbol: "CCEP", exchange: "NASDAQ" },
+  { id: "SBUX", name: "Starbucks", sector: "Food & Beverage", symbol: "SBUX", exchange: "NASDAQ" },
+  { id: "TSLA", name: "Tesla", sector: "Auto & Mobility", symbol: "TSLA", exchange: "NASDAQ" },
+  { id: "PCAR", name: "PACCAR", sector: "Auto & Mobility", symbol: "PCAR", exchange: "NASDAQ" },
+  { id: "CPRT", name: "Copart", sector: "Auto & Mobility", symbol: "CPRT", exchange: "NASDAQ" },
+  { id: "HON", name: "Honeywell International", sector: "Industrials & Aerospace", symbol: "HON", exchange: "NASDAQ" },
+  { id: "LIN", name: "Linde", sector: "Industrials & Aerospace", symbol: "LIN", exchange: "NASDAQ" },
+  { id: "RKLB", name: "Rocket Lab", sector: "Industrials & Aerospace", symbol: "RKLB", exchange: "NASDAQ" },
+  { id: "AXON", name: "Axon Enterprise", sector: "Industrials & Aerospace", symbol: "AXON", exchange: "NASDAQ" },
+  { id: "FAST", name: "Fastenal", sector: "Industrials & Aerospace", symbol: "FAST", exchange: "NASDAQ" },
+  { id: "CTAS", name: "Cintas", sector: "Industrials & Aerospace", symbol: "CTAS", exchange: "NASDAQ" },
+  { id: "FER", name: "Ferrovial", sector: "Industrials & Aerospace", symbol: "FER", exchange: "NASDAQ" },
+  { id: "CEG", name: "Constellation Energy", sector: "Energy & Utilities", symbol: "CEG", exchange: "NASDAQ" },
+  { id: "AEP", name: "American Electric Power", sector: "Energy & Utilities", symbol: "AEP", exchange: "NASDAQ" },
+  { id: "EXC", name: "Exelon", sector: "Energy & Utilities", symbol: "EXC", exchange: "NASDAQ" },
+  { id: "XEL", name: "Xcel Energy", sector: "Energy & Utilities", symbol: "XEL", exchange: "NASDAQ" },
+  { id: "BKR", name: "Baker Hughes", sector: "Energy & Utilities", symbol: "BKR", exchange: "NASDAQ" },
+  { id: "FANG", name: "Diamondback Energy", sector: "Energy & Utilities", symbol: "FANG", exchange: "NASDAQ" },
+  { id: "TMUS", name: "T-Mobile US", sector: "Logistics & Telecom", symbol: "TMUS", exchange: "NASDAQ" },
+  { id: "CMCSA", name: "Comcast", sector: "Logistics & Telecom", symbol: "CMCSA", exchange: "NASDAQ" },
+  { id: "CSX", name: "CSX Corporation", sector: "Logistics & Telecom", symbol: "CSX", exchange: "NASDAQ" },
+  { id: "ODFL", name: "Old Dominion Freight", sector: "Logistics & Telecom", symbol: "ODFL", exchange: "NASDAQ" },
+  { id: "PYPL", name: "PayPal Holdings", sector: "Payments & Business Services", symbol: "PYPL", exchange: "NASDAQ" },
+  { id: "ADP", name: "ADP", sector: "Payments & Business Services", symbol: "ADP", exchange: "NASDAQ" },
+  { id: "PAYX", name: "Paychex", sector: "Payments & Business Services", symbol: "PAYX", exchange: "NASDAQ" },
+  { id: "MAR", name: "Marriott International", sector: "Consumer Tech & Media", symbol: "MAR", exchange: "NASDAQ" },
+];
+
+const nasdaqSupplyRaw = [
+  { id: "TSMC", name: "TSMC", sector: "Semiconductors & Hardware", listing: "listed_us", desc: "NYSE: TSM / TWSE: 2330 • Leading-edge 3nm/2nm foundry & CoWoS packaging" },
+  { id: "SKHYNIX", name: "SK hynix", sector: "Semiconductors & Hardware", listing: "listed_intl", desc: "KRX: 000660 • HBM3E / HBM4 high-bandwidth memory for AI GPUs" },
+  { id: "SAMSUNG_F", name: "Samsung Electronics", sector: "Semiconductors & Hardware", listing: "listed_intl", desc: "KRX: 005930 • OLED displays, DRAM/NAND & foundry services" },
+  { id: "FOXCONN", name: "Foxconn (Hon Hai)", sector: "Semiconductors & Hardware", listing: "listed_intl", desc: "TWSE: 2317 • iPhone assembly & NVIDIA GB200/Rubin AI server racks" },
+  { id: "ASE_TECH", name: "ASE Technology (SPIL)", sector: "Semiconductors & Hardware", listing: "listed_us", desc: "NYSE: ASX • World's largest OSAT chip packaging & testing" },
+  { id: "AMKOR", name: "Amkor Technology", sector: "Semiconductors & Hardware", listing: "listed_us", desc: "NASDAQ: AMKR • Advanced IC packaging & wafer bump testing" },
+  { id: "IBIDEN", name: "Ibiden Co.", sector: "Semiconductors & Hardware", listing: "listed_intl", desc: "TYO: 4062 • High-layer ABF substrates for AI GPUs & CPUs" },
+  { id: "UNICRN", name: "Unimicron Technology", sector: "Semiconductors & Hardware", listing: "listed_intl", desc: "TWSE: 3037 • ABF substrates & high-density PCBs" },
+  { id: "SHINETSU", name: "Shin-Etsu Chemical", sector: "Semiconductors & Hardware", listing: "listed_intl", desc: "TYO: 4063 • 300mm silicon wafers & EUV photoresists" },
+  { id: "SUMCO", name: "SUMCO Corporation", sector: "Semiconductors & Hardware", listing: "listed_intl", desc: "TYO: 3436 • Ultra-pure monocrystalline silicon wafers" },
+  { id: "QUANTA", name: "Quanta Computer", sector: "Semiconductors & Hardware", listing: "listed_intl", desc: "TWSE: 2382 • Cloud AI servers & MacBook manufacturing" },
+  { id: "WIWYNN", name: "Wiwynn", sector: "Semiconductors & Hardware", listing: "listed_intl", desc: "TWSE: 6669 • Hyperscale AI server racks for Meta & Microsoft" },
+  { id: "PEGATRON", name: "Pegatron", sector: "Semiconductors & Hardware", listing: "listed_intl", desc: "TWSE: 4938 • Consumer electronics & automotive EMS assembly" },
+  { id: "LUXSHARE", name: "Luxshare Precision", sector: "Semiconductors & Hardware", listing: "listed_intl", desc: "SZSE: 002475 • AirPods, iPhone modules & high-speed interconnects" },
+  { id: "MURATA", name: "Murata Manufacturing", sector: "Semiconductors & Hardware", listing: "listed_intl", desc: "TYO: 6981 • Multilayer ceramic capacitors (MLCCs) & RF modules" },
+  { id: "SONY_SEMI", name: "Sony Semiconductor", sector: "Semiconductors & Hardware", listing: "listed_us", desc: "NYSE: SONY • CMOS camera image sensors for Apple & automotive" },
+  { id: "DELTA_EL", name: "Delta Electronics", sector: "Semiconductors & Hardware", listing: "listed_intl", desc: "TWSE: 2308 • AI data center power supplies & thermal fans" },
+  { id: "GLOBALFOUNDRIES", name: "GlobalFoundries", sector: "Semiconductors & Hardware", listing: "listed_us", desc: "NASDAQ: GFS • Specialty RF, automotive & power silicon foundry" },
+  { id: "UMC", name: "UMC", sector: "Semiconductors & Hardware", listing: "listed_us", desc: "NYSE: UMC • Mature & specialty wafer foundry" },
+  { id: "STMICRO", name: "STMicroelectronics", sector: "Semiconductors & Hardware", listing: "listed_us", desc: "NYSE: STM • SiC power MOSFETs & automotive microcontrollers" },
+  { id: "ONSEMI", name: "onsemi", sector: "Semiconductors & Hardware", listing: "listed_us", desc: "NASDAQ: ON • SiC power modules & automotive image sensors" },
+  { id: "CORNING", name: "Corning", sector: "Semiconductors & Hardware", listing: "listed_us", desc: "NYSE: GLW • Optical fiber, glass substrates & Ceramic Shield" },
+  { id: "JABIL", name: "Jabil", sector: "Industrials & Aerospace", listing: "listed_us", desc: "NYSE: JBL • Electronics manufacturing services & photonics" },
+  { id: "FLEX_LTD", name: "Flex Ltd.", sector: "Industrials & Aerospace", listing: "listed_us", desc: "NASDAQ: FLEX • Contract manufacturing & cloud hardware racks" },
+  { id: "ARROW", name: "Arrow Electronics", sector: "Semiconductors & Hardware", listing: "listed_us", desc: "NYSE: ARW • Global authorized semiconductor & component distributor" },
+  { id: "AVNET", name: "Avnet", sector: "Semiconductors & Hardware", listing: "listed_us", desc: "NASDAQ: AVT • Authorized electronic component supply chain" },
+  { id: "TE_CONN", name: "TE Connectivity", sector: "Industrials & Aerospace", listing: "listed_us", desc: "NYSE: TEL • Harsh-environment connectors & sensors" },
+  { id: "AMPHENOL", name: "Amphenol", sector: "Semiconductors & Hardware", listing: "listed_us", desc: "NYSE: APH • High-speed copper backplane cables for AI racks" },
+  { id: "ZEISS_SMT", name: "Carl Zeiss SMT", sector: "Semiconductors & Hardware", listing: "unlisted", desc: "Unlisted (Carl Zeiss Foundation) • EUV lithography mirrors & optics for ASML" },
+  { id: "TRUMPF", name: "TRUMPF Group", sector: "Semiconductors & Hardware", listing: "unlisted", desc: "Unlisted (Germany Private) • High-power CO2 drive lasers for ASML EUV" },
+  { id: "BOSCH_GMBH", name: "Robert Bosch GmbH", sector: "Auto & Mobility", listing: "unlisted", desc: "Unlisted (Bosch Stiftung) • Automotive ECUs, SiC chips & MEMS sensors" },
+  { id: "PRIV_EMS_AXON", name: "Private PCB & EMS Assemblers", sector: "Industrials & Aerospace", listing: "unlisted", desc: "Unlisted Contract Manufacturers • Camera & TASER hardware PCB assembly" },
+  { id: "PRIV_AERO_SHOPS", name: "Precision Aerospace Machine Shops", sector: "Industrials & Aerospace", listing: "unlisted", desc: "Unlisted Tier-2 Vendors • Carbon composites & CNC rocket/surgical parts" },
+  { id: "VERTIV", name: "Vertiv", sector: "Cloud, AI & Software", listing: "listed_us", desc: "NYSE: VRT • Direct-to-chip liquid cooling & AI power systems" },
+  { id: "EATON", name: "Eaton", sector: "Energy & Utilities", listing: "listed_us", desc: "NYSE: ETN • Data center switchgear, UPS & grid transformers" },
+  { id: "SCHNEIDER", name: "Schneider Electric", sector: "Energy & Utilities", listing: "listed_intl", desc: "EPA: SU • Modular data center cooling & power distribution" },
+  { id: "EQUINIX", name: "Equinix", sector: "Cloud, AI & Software", listing: "listed_us", desc: "NASDAQ: EQIX • Carrier-neutral colocation & cloud interconnection" },
+  { id: "DIGITAL_REALTY", name: "Digital Realty", sector: "Cloud, AI & Software", listing: "listed_us", desc: "NYSE: DLR • Hyperscale data center campuses" },
+  { id: "ARISTA", name: "Arista Networks", sector: "Cloud, AI & Software", listing: "listed_us", desc: "NYSE: ANET • 400G/800G Ethernet switches for AI clusters" },
+  { id: "SMCI", name: "Supermicro", sector: "Semiconductors & Hardware", listing: "listed_us", desc: "NASDAQ: SMCI • Liquid-cooled GPU servers & storage racks" },
+  { id: "OPENAI", name: "OpenAI", sector: "Cloud, AI & Software", listing: "unlisted", desc: "Unlisted AI Lab • Flagship Azure AI compute & NVIDIA cluster partner" },
+  { id: "ANTHROPIC", name: "Anthropic", sector: "Cloud, AI & Software", listing: "unlisted", desc: "Unlisted AI Lab • Strategic AWS & Google Cloud frontier model partner" },
+  { id: "DATABRICKS", name: "Databricks", sector: "Cloud, AI & Software", listing: "unlisted", desc: "Unlisted Data/AI Platform • Enterprise lakehouse & RAG pipelines" },
+  { id: "SCALE_AI", name: "Scale AI", sector: "Cloud, AI & Software", listing: "unlisted", desc: "Unlisted AI Data Partner • LLM curation, annotation & RLHF" },
+  { id: "CRUSOE", name: "Crusoe Energy", sector: "Cloud, AI & Software", listing: "unlisted", desc: "Unlisted AI Cloud • Clean-power GPU data center infrastructure" },
+  { id: "LAMBDA_LABS", name: "Lambda Labs", sector: "Cloud, AI & Software", listing: "unlisted", desc: "Unlisted GPU Cloud • On-demand NVIDIA AI training clusters" },
+  { id: "STRIPE", name: "Stripe", sector: "Payments & Business Services", listing: "unlisted", desc: "Unlisted Fintech • Payment processing for Shopify, Amazon, Airbnb, DoorDash" },
+  { id: "SPACEX", name: "SpaceX (Starlink)", sector: "Industrials & Aerospace", listing: "unlisted", desc: "Unlisted Aerospace • T-Mobile Direct-to-Cell satellite partner" },
+  { id: "NOKIA", name: "Nokia", sector: "Logistics & Telecom", listing: "listed_us", desc: "NYSE: NOK • 5G RAN, optical networking & core telecom gear" },
+  { id: "ERICSSON", name: "Ericsson", sector: "Logistics & Telecom", listing: "listed_us", desc: "NASDAQ: ERIC • 5G base stations & radio access infrastructure" },
+  { id: "AMT", name: "American Tower", sector: "Logistics & Telecom", listing: "listed_us", desc: "NYSE: AMT • Macro wireless tower leasing infrastructure" },
+  { id: "CCI", name: "Crown Castle", sector: "Logistics & Telecom", listing: "listed_us", desc: "NYSE: CCI • US wireless towers & small-cell fiber backhaul" },
+  { id: "PRIV_FIBER", name: "Regional Dark-Fiber Operators", sector: "Logistics & Telecom", listing: "unlisted", desc: "Unlisted Telecom Vendors • Localized metro fiber backhaul & tower rigging" },
+  { id: "PANASONIC_E", name: "Panasonic Energy", sector: "Auto & Mobility", listing: "listed_intl", desc: "TYO: 6752 • EV 2170/4680 battery cells (Gigafactory Nevada)" },
+  { id: "CATL", name: "CATL", sector: "Auto & Mobility", listing: "listed_intl", desc: "SZSE: 300750 • LFP & Megapack EV/grid battery cells" },
+  { id: "LG_ENERGY", name: "LG Energy Solution", sector: "Auto & Mobility", listing: "listed_intl", desc: "KRX: 373220 • Lithium-ion EV battery packs & cells" },
+  { id: "APTIV", name: "Aptiv", sector: "Auto & Mobility", listing: "listed_us", desc: "NYSE: APTV • High-voltage EV wiring & vehicle architecture" },
+  { id: "ALBEMARLE", name: "Albemarle", sector: "Auto & Mobility", listing: "listed_us", desc: "NYSE: ALB • Battery-grade lithium carbonate & hydroxide" },
+  { id: "CUMMINS", name: "Cummins", sector: "Auto & Mobility", listing: "listed_us", desc: "NYSE: CMI • Heavy-duty diesel & clean truck powertrains" },
+  { id: "MAGNA", name: "Magna International", sector: "Auto & Mobility", listing: "listed_us", desc: "NYSE: MGA • Truck body systems, chassis & e-drive components" },
+  { id: "AXALTA", name: "Axalta Coating Systems", sector: "Auto & Mobility", listing: "listed_us", desc: "NYSE: AXTA • Commercial vehicle & industrial coatings" },
+  { id: "HORTON", name: "Horton Holding", sector: "Auto & Mobility", listing: "unlisted", desc: "Unlisted Private • Engine cooling fans & thermal clutches for PACCAR" },
+  { id: "CONMET", name: "ConMet (Consolidated Metco)", sector: "Auto & Mobility", listing: "unlisted", desc: "Unlisted (Amsted) • Truck wheel hubs, aluminum castings & plastics" },
+  { id: "FRITZ_WINTER", name: "Fritz Winter Eisengießerei", sector: "Auto & Mobility", listing: "unlisted", desc: "Unlisted (Germany Private) • Heavy iron engine blocks & brake drums" },
+  { id: "BERGSTROM", name: "Bergstrom Climate Systems", sector: "Auto & Mobility", listing: "unlisted", desc: "Unlisted Private • Commercial truck cab HVAC systems" },
+  { id: "CFM_INTL", name: "CFM International", sector: "Industrials & Aerospace", listing: "unlisted", desc: "Unlisted 50:50 JV (GE/Safran) • Commercial jet propulsion & avionics integration" },
+  { id: "LMT", name: "Lockheed Martin", sector: "Industrials & Aerospace", listing: "listed_us", desc: "NYSE: LMT • Defense prime integrating Honeywell avionics & Rocket Lab" },
+  { id: "LONZA", name: "Lonza Group", sector: "Healthcare & Biotech", listing: "listed_intl", desc: "SIX: LONN • Biologics, mRNA & cell/gene therapy CDMO" },
+  { id: "THERMO_FISHER", name: "Thermo Fisher Scientific", sector: "Healthcare & Biotech", listing: "listed_us", desc: "NYSE: TMO • Patheon CDMO, lab reagents & viral vector manufacturing" },
+  { id: "DANAHER", name: "Danaher", sector: "Healthcare & Biotech", listing: "listed_us", desc: "NYSE: DHR • Cytiva bioprocessing equipment & consumables" },
+  { id: "SARTORIUS", name: "Sartorius", sector: "Healthcare & Biotech", listing: "listed_intl", desc: "ETR: SRT • Single-use bioreactors & bioprocess filtration" },
+  { id: "SAMSUNG_BIO", name: "Samsung Biologics", sector: "Healthcare & Biotech", listing: "listed_intl", desc: "KRX: 207940 • Commercial-scale monoclonal antibody CDMO" },
+  { id: "WEST_PHARMA", name: "West Pharmaceutical", sector: "Healthcare & Biotech", listing: "listed_us", desc: "NYSE: WST • Injectable elastomer vials, stoppers & delivery seals" },
+  { id: "CATALENT", name: "Catalent", sector: "Healthcare & Biotech", listing: "unlisted", desc: "Unlisted (Novo Holdings) • Sterile fill-finish & biologics CDMO" },
+  { id: "ALDEVRON", name: "Aldevron", sector: "Healthcare & Biotech", listing: "unlisted", desc: "Unlisted (Danaher Unit) • Plasmid DNA & mRNA capping enzymes" },
+  { id: "MCKESSON", name: "McKesson", sector: "Healthcare & Biotech", listing: "listed_us", desc: "NYSE: MCK • Pharmaceutical & medical device wholesale distribution" },
+  { id: "CARDINAL_H", name: "Cardinal Health", sector: "Healthcare & Biotech", listing: "listed_us", desc: "NYSE: CAH • Medical device, diagnostics & pharma distribution" },
+  { id: "CENCORA", name: "Cencora", sector: "Healthcare & Biotech", listing: "listed_us", desc: "NYSE: COR • Specialty pharma & biotech logistics distribution" },
+  { id: "BYRAM_HC", name: "Byram Healthcare", sector: "Healthcare & Biotech", listing: "unlisted", desc: "Unlisted (Owens & Minor) • Direct-to-patient CGM medical supplier" },
+  { id: "CCS_MED", name: "CCS Medical", sector: "Healthcare & Biotech", listing: "unlisted", desc: "Unlisted Private • Chronic care & diabetes device distributor" },
+  { id: "NOVARTIS", name: "Novartis", sector: "Healthcare & Biotech", listing: "listed_us", desc: "NYSE: NVS • RNAi co-development & global pharma partner" },
+  { id: "SANOFI", name: "Sanofi", sector: "Healthcare & Biotech", listing: "listed_us", desc: "NASDAQ: SNY • Biologics immunology partner (Dupixent / RNAi)" },
+  { id: "TANDEM", name: "Tandem Diabetes Care", sector: "Healthcare & Biotech", listing: "listed_us", desc: "NASDAQ: TNDM • Insulin pump integration partner for DexCom CGM" },
+  { id: "INSULET", name: "Insulet (Omnipod)", sector: "Healthcare & Biotech", listing: "listed_us", desc: "NASDAQ: PODD • Tubeless insulin pump CGM integration" },
+  { id: "HCA_HC", name: "HCA Healthcare", sector: "Healthcare & Biotech", listing: "listed_us", desc: "NYSE: HCA • Hospital network adopting da Vinci & GEHC imaging" },
+  { id: "PG", name: "Procter & Gamble", sector: "Food & Beverage", listing: "listed_us", desc: "NYSE: PG • Household & personal care staples supplier" },
+  { id: "KO", name: "The Coca-Cola Company", sector: "Food & Beverage", listing: "listed_us", desc: "NYSE: KO • Beverage concentrate & brand owner for CCEP/MNST" },
+  { id: "UNILEVER", name: "Unilever", sector: "Food & Beverage", listing: "listed_us", desc: "NYSE: UL • Packaged foods & home care brands at retail" },
+  { id: "BALL_CORP", name: "Ball Corporation", sector: "Food & Beverage", listing: "listed_us", desc: "NYSE: BALL • Aluminum beverage cans for PepsiCo, KDP, Monster" },
+  { id: "CROWN_HOLD", name: "Crown Holdings", sector: "Food & Beverage", listing: "listed_us", desc: "NYSE: CCK • Metal beverage cans & food packaging" },
+  { id: "PKG_CORP", name: "Packaging Corp of America", sector: "Industrials & Aerospace", listing: "listed_us", desc: "NYSE: PKG • Corrugated shipping boxes for retail & CPG" },
+  { id: "INTL_PAPER", name: "International Paper", sector: "Industrials & Aerospace", listing: "listed_us", desc: "NYSE: IP • Containerboard & industrial e-commerce packaging" },
+  { id: "AVERY_DENN", name: "Avery Dennison", sector: "Retail & E-Commerce", listing: "listed_us", desc: "NYSE: AVY • RFID smart tags & logistics barcode labels" },
+  { id: "VARUN_BEV", name: "Varun Beverages", sector: "Food & Beverage", listing: "listed_intl", desc: "NSE: VBL • Largest international PepsiCo bottling partner" },
+  { id: "OLAM_GRP", name: "Olam Group", sector: "Food & Beverage", listing: "listed_intl", desc: "SGX: O32 • Global green coffee, cocoa & agri supply chain" },
+  { id: "ITOCHU", name: "Itochu Corporation", sector: "Food & Beverage", listing: "listed_intl", desc: "TYO: 8001 • Coffee bean trading & textile supply logistics" },
+  { id: "TATACONSUM_S", name: "Tata Consumer Products", sector: "Food & Beverage", listing: "listed_intl", desc: "NSE: TATACONSUM • Starbucks India JV & tea/coffee sourcing" },
+  { id: "CARGILL", name: "Cargill", sector: "Food & Beverage", listing: "unlisted", desc: "Unlisted Private • Largest US agri-commodity supplier (corn, cocoa, oils)" },
+  { id: "LOUIS_DREYFUS", name: "Louis Dreyfus Company (LDC)", sector: "Food & Beverage", listing: "unlisted", desc: "Unlisted Private • Global coffee, sugar & grain commodity merchant" },
+  { id: "SUCAFINA", name: "Sucafina", sector: "Food & Beverage", listing: "unlisted", desc: "Unlisted (Switzerland Private) • Specialty coffee bean sourcing" },
+  { id: "MARS_INC", name: "Mars, Inc.", sector: "Food & Beverage", listing: "unlisted", desc: "Unlisted Private • Confectionery & pet nutrition supplier to retail" },
+  { id: "SCHREIBER", name: "Schreiber Foods", sector: "Food & Beverage", listing: "unlisted", desc: "Unlisted (Employee-Owned) • Private-label dairy for Walmart & Costco" },
+  { id: "PRIVATE_LABEL_MFG", name: "Kirkland & Great Value Co-Packers", sector: "Retail & E-Commerce", listing: "unlisted", desc: "Unlisted Private-Label Mills • White-label CPG & apparel factories" },
+  { id: "D2C_PACK", name: "D2C Mailer & Cold-Chain Converters", sector: "Retail & E-Commerce", listing: "unlisted", desc: "Unlisted Packaging Vendors • Custom mailers & food delivery insulation" },
+  { id: "HOSP_VENDORS", name: "Hospitality Linen & Amenity Vendors", sector: "Consumer Tech & Media", listing: "unlisted", desc: "Unlisted B2B Vendors • Hotel room textiles, F&B & furnishings" },
+  { id: "UPS", name: "UPS", sector: "Logistics & Telecom", listing: "listed_us", desc: "NYSE: UPS • Parcel fulfillment for Amazon, Costco, Walmart, Apple" },
+  { id: "FEDEX", name: "FedEx", sector: "Logistics & Telecom", listing: "listed_us", desc: "NYSE: FDX • Air/ground express & healthcare cold-chain freight" },
+  { id: "JBHUNT", name: "J.B. Hunt", sector: "Logistics & Telecom", listing: "listed_us", desc: "NASDAQ: JBHT • Intermodal rail/trucking partner for CSX & Walmart" },
+  { id: "UNION_PAC", name: "Union Pacific", sector: "Logistics & Telecom", listing: "listed_us", desc: "NYSE: UNP • Western US Class I freight rail interchange" },
+  { id: "SLB", name: "SLB (Schlumberger)", sector: "Energy & Utilities", listing: "listed_us", desc: "NYSE: SLB • Oilfield completions, drilling & reservoir tech" },
+  { id: "HALLIBURTON", name: "Halliburton", sector: "Energy & Utilities", listing: "listed_us", desc: "NYSE: HAL • Hydraulic fracturing & Permian well completion" },
+  { id: "EPD", name: "Enterprise Products Partners", sector: "Energy & Utilities", listing: "listed_us", desc: "NYSE: EPD • Midstream pipelines & Permian hydrocarbon transport" },
+  { id: "PERMIAN_SAND", name: "Permian Frac-Sand & Rig Vendors", sector: "Energy & Utilities", listing: "unlisted", desc: "Unlisted Regional Vendors • Proppant sand mines & drilling rigs" },
+  { id: "GE_VERNOVA", name: "GE Vernova", sector: "Energy & Utilities", listing: "listed_us", desc: "NYSE: GEV • Gas turbines, grid transformers & wind infrastructure" },
+  { id: "CAMECO", name: "Cameco", sector: "Energy & Utilities", listing: "listed_us", desc: "NYSE: CCJ • Uranium fuel & nuclear reactor services" },
+  { id: "WESTINGHOUSE", name: "Westinghouse Electric", sector: "Energy & Utilities", listing: "unlisted", desc: "Unlisted (Brookfield/Cameco) • Nuclear fuel assemblies & outages" },
+  { id: "URENCO", name: "Urenco Group", sector: "Energy & Utilities", listing: "unlisted", desc: "Unlisted Consortium • Enriched uranium fuel for nuclear utilities" },
+  { id: "VULCAN_MAT", name: "Vulcan Materials", sector: "Industrials & Aerospace", listing: "listed_us", desc: "NYSE: VMC • Aggregates, asphalt & highway construction materials" },
+  { id: "NUCOR", name: "Nucor", sector: "Industrials & Aerospace", listing: "listed_us", desc: "NYSE: NUE • Structural steel for data centers, rail & infrastructure" },
+  { id: "VISA", name: "Visa", sector: "Payments & Business Services", listing: "listed_us", desc: "NYSE: V • Global card settlement rails & tokenization" },
+  { id: "MASTERCARD", name: "Mastercard", sector: "Payments & Business Services", listing: "listed_us", desc: "NYSE: MA • Global payment network & open-banking APIs" },
+  { id: "INTUITIVE_QBO", name: "Xero (Cloud Accounting)", sector: "Payments & Business Services", listing: "listed_intl", desc: "ASX: XRO • SMB accounting ecosystem integrated with Paychex/PayPal" },
+];
+
+const nasdaqLinksRaw = [
+  { source: "ZEISS_SMT", target: "ASML", type: "supplier", label: "EUV optics & mirrors" },
+  { source: "TRUMPF", target: "ASML", type: "supplier", label: "EUV CO2 drive lasers" },
+  { source: "SHINETSU", target: "TSMC", type: "supplier", label: "300mm wafers & photoresists" },
+  { source: "SUMCO", target: "TSMC", type: "supplier", label: "Silicon wafers" },
+  { source: "SHINETSU", target: "INTC", type: "supplier", label: "Silicon wafers" },
+  { source: "SUMCO", target: "MU", type: "supplier", label: "DRAM/NAND wafers" },
+  { source: "SHINETSU", target: "SAMSUNG_F", type: "supplier", label: "Silicon wafers" },
+  { source: "ASML", target: "TSMC", type: "supplier", label: "EUV / High-NA lithography" },
+  { source: "AMAT", target: "TSMC", type: "supplier", label: "Deposition & CMP tools" },
+  { source: "LRCX", target: "TSMC", type: "supplier", label: "Etch & deposition systems" },
+  { source: "KLAC", target: "TSMC", type: "supplier", label: "Wafer inspection & metrology" },
+  { source: "TER", target: "TSMC", type: "supplier", label: "Automated SoC test" },
+  { source: "ASML", target: "INTC", type: "supplier", label: "High-NA EUV scanners" },
+  { source: "AMAT", target: "INTC", type: "supplier", label: "Wafer fab deposition" },
+  { source: "LRCX", target: "INTC", type: "supplier", label: "Etch tools" },
+  { source: "KLAC", target: "INTC", type: "supplier", label: "Yield metrology" },
+  { source: "ASML", target: "MU", type: "supplier", label: "DRAM EUV lithography" },
+  { source: "LRCX", target: "MU", type: "supplier", label: "3D NAND etch tools" },
+  { source: "AMAT", target: "MU", type: "supplier", label: "Memory deposition" },
+  { source: "TER", target: "MU", type: "supplier", label: "Memory wafer test" },
+  { source: "ASML", target: "SAMSUNG_F", type: "supplier", label: "EUV lithography" },
+  { source: "LRCX", target: "SKHYNIX", type: "supplier", label: "HBM etch systems" },
+  { source: "AMAT", target: "TXN", type: "supplier", label: "Analog fab tools" },
+  { source: "TER", target: "TXN", type: "supplier", label: "Analog IC test systems" },
+  { source: "KLAC", target: "ADI", type: "supplier", label: "Process control tools" },
+  { source: "TER", target: "QCOM", type: "supplier", label: "RF & SoC test" },
+  { source: "SNPS", target: "NVDA", type: "partner", label: "Chip EDA & IP" },
+  { source: "CDNS", target: "NVDA", type: "partner", label: "Verification & PCB EDA" },
+  { source: "ARM", target: "NVDA", type: "partner", label: "Grace CPU architecture" },
+  { source: "SNPS", target: "AAPL", type: "partner", label: "Silicon EDA tools" },
+  { source: "CDNS", target: "AAPL", type: "partner", label: "M/A-series EDA" },
+  { source: "ARM", target: "AAPL", type: "partner", label: "ARMv9 ISA license" },
+  { source: "SNPS", target: "AMD", type: "partner", label: "EDA design suite" },
+  { source: "CDNS", target: "AVGO", type: "partner", label: "ASIC EDA & IP" },
+  { source: "ARM", target: "QCOM", type: "partner", label: "Snapdragon ISA" },
+  { source: "SNPS", target: "INTC", type: "partner", label: "Foundry EDA & IP" },
+  { source: "CDNS", target: "MRVL", type: "partner", label: "Custom silicon EDA" },
+  { source: "ARM", target: "MRVL", type: "partner", label: "Data center CPU IP" },
+  { source: "TSMC", target: "NVDA", type: "supplier", label: "4nm/3nm & CoWoS wafers" },
+  { source: "SKHYNIX", target: "NVDA", type: "supplier", label: "HBM3E / HBM4 memory" },
+  { source: "MU", target: "NVDA", type: "supplier", label: "HBM3E & GDDR7 memory" },
+  { source: "IBIDEN", target: "NVDA", type: "supplier", label: "ABF GPU substrates" },
+  { source: "ASE_TECH", target: "NVDA", type: "supplier", label: "SPIL CoWoS OSAT" },
+  { source: "MPWR", target: "NVDA", type: "supplier", label: "GPU voltage regulators" },
+  { source: "FOXCONN", target: "NVDA", type: "supplier", label: "Blackwell/Rubin AI racks" },
+  { source: "QUANTA", target: "NVDA", type: "supplier", label: "HGX/DGX AI servers" },
+  { source: "AMPHENOL", target: "NVDA", type: "supplier", label: "NVLink copper backplanes" },
+  { source: "SMCI", target: "NVDA", type: "partner", label: "Liquid-cooled GPU servers" },
+  { source: "TSMC", target: "AAPL", type: "supplier", label: "3nm / 2nm Apple Silicon" },
+  { source: "FOXCONN", target: "AAPL", type: "supplier", label: "iPhone assembly" },
+  { source: "PEGATRON", target: "AAPL", type: "supplier", label: "iPhone & iPad assembly" },
+  { source: "LUXSHARE", target: "AAPL", type: "supplier", label: "AirPods & iPhone modules" },
+  { source: "QUANTA", target: "AAPL", type: "supplier", label: "MacBook manufacturing" },
+  { source: "SAMSUNG_F", target: "AAPL", type: "supplier", label: "OLED panels & memory" },
+  { source: "SONY_SEMI", target: "AAPL", type: "supplier", label: "Pro camera CMOS sensors" },
+  { source: "CORNING", target: "AAPL", type: "supplier", label: "Ceramic Shield glass" },
+  { source: "MURATA", target: "AAPL", type: "supplier", label: "MLCCs & RF filters" },
+  { source: "AVGO", target: "AAPL", type: "supplier", label: "Wi-Fi/BT & RF chips" },
+  { source: "QCOM", target: "AAPL", type: "supplier", label: "5G cellular modems" },
+  { source: "TXN", target: "AAPL", type: "supplier", label: "Power & USB-C chips" },
+  { source: "STMICRO", target: "AAPL", type: "supplier", label: "FaceID & power controllers" },
+  { source: "BOSCH_GMBH", target: "AAPL", type: "supplier", label: "MEMS barometric sensors" },
+  { source: "TSMC", target: "AMD", type: "supplier", label: "EPYC & Instinct wafers" },
+  { source: "SKHYNIX", target: "AMD", type: "supplier", label: "Instinct HBM3E memory" },
+  { source: "MU", target: "AMD", type: "supplier", label: "HBM3E & DDR5 memory" },
+  { source: "ASE_TECH", target: "AMD", type: "supplier", label: "Chiplet OSAT packaging" },
+  { source: "IBIDEN", target: "AMD", type: "supplier", label: "Server CPU substrates" },
+  { source: "AMKOR", target: "AMD", type: "supplier", label: "IC packaging & test" },
+  { source: "TSMC", target: "AVGO", type: "supplier", label: "Custom AI XPU & switches" },
+  { source: "UNICRN", target: "AVGO", type: "supplier", label: "ABF switch substrates" },
+  { source: "ASE_TECH", target: "AVGO", type: "supplier", label: "2.5D packaging & test" },
+  { source: "TSMC", target: "QCOM", type: "supplier", label: "Snapdragon 3nm wafers" },
+  { source: "SAMSUNG_F", target: "QCOM", type: "supplier", label: "Foundry & LPDDR5X" },
+  { source: "AMKOR", target: "QCOM", type: "supplier", label: "Mobile SoC OSAT" },
+  { source: "TSMC", target: "MRVL", type: "supplier", label: "Custom AI silicon & DSPs" },
+  { source: "LITE", target: "MRVL", type: "supplier", label: "Optical photonic transceivers" },
+  { source: "TSMC", target: "ALAB", type: "supplier", label: "PCIe / CXL retimer chips" },
+  { source: "TSMC", target: "MPWR", type: "supplier", label: "Power IC wafers" },
+  { source: "UMC", target: "TXN", type: "supplier", label: "Mature-node analog wafers" },
+  { source: "TSMC", target: "ADI", type: "supplier", label: "Mixed-signal foundry" },
+  { source: "GLOBALFOUNDRIES", target: "NXPI", type: "supplier", label: "Auto MCU & RF foundry" },
+  { source: "TSMC", target: "NXPI", type: "supplier", label: "5nm/16nm auto processors" },
+  { source: "UMC", target: "MCHP", type: "supplier", label: "Embedded MCU foundry" },
+  { source: "MCHP", target: "ARROW", type: "customer", label: "Embedded distribution" },
+  { source: "ADI", target: "AVNET", type: "customer", label: "Analog component distribution" },
+  { source: "NXPI", target: "ARROW", type: "customer", label: "Auto/IoT distribution" },
+  { source: "CORNING", target: "LITE", type: "supplier", label: "Optical fiber & glass" },
+  { source: "JABIL", target: "LITE", type: "supplier", label: "Optical transceiver assembly" },
+  { source: "TSMC", target: "STX", type: "supplier", label: "HDD controller SoCs" },
+  { source: "MURATA", target: "STX", type: "supplier", label: "Precision passive components" },
+  { source: "WDC", target: "SNDK", type: "subsidiary", label: "Flash spin-off partner" },
+  { source: "AMKOR", target: "SNDK", type: "supplier", label: "NAND flash packaging" },
+  { source: "JABIL", target: "WDC", type: "supplier", label: "Enterprise drive PCBAs" },
+  { source: "NVDA", target: "MSFT", type: "supplier", label: "AI GPU clusters" },
+  { source: "NVDA", target: "AMZN", type: "supplier", label: "AWS GPU instances" },
+  { source: "NVDA", target: "GOOGL", type: "supplier", label: "GCP GPU compute" },
+  { source: "NVDA", target: "META", type: "supplier", label: "Llama training clusters" },
+  { source: "NVDA", target: "CRWV", type: "supplier", label: "Blackwell GPU allocation" },
+  { source: "NVDA", target: "NBIS", type: "supplier", label: "H200/Blackwell AI clusters" },
+  { source: "AVGO", target: "GOOGL", type: "supplier", label: "Custom TPU XPUs & switches" },
+  { source: "AVGO", target: "META", type: "supplier", label: "MTIA AI silicon & Ethernet" },
+  { source: "ALAB", target: "AMZN", type: "supplier", label: "AWS AI server retimers" },
+  { source: "ALAB", target: "MSFT", type: "supplier", label: "Azure PCIe connectivity" },
+  { source: "ARISTA", target: "MSFT", type: "supplier", label: "Azure 400G/800G Ethernet" },
+  { source: "ARISTA", target: "META", type: "supplier", label: "AI fabric switches" },
+  { source: "CSCO", target: "AMZN", type: "supplier", label: "Data center optical networking" },
+  { source: "LITE", target: "AMZN", type: "supplier", label: "800G optical transceivers" },
+  { source: "STX", target: "AMZN", type: "supplier", label: "Nearline cloud HDDs" },
+  { source: "WDC", target: "MSFT", type: "supplier", label: "Azure cloud HDDs" },
+  { source: "SNDK", target: "META", type: "supplier", label: "Enterprise NVMe SSDs" },
+  { source: "INTC", target: "MSFT", type: "supplier", label: "Xeon server CPUs" },
+  { source: "AMD", target: "MSFT", type: "supplier", label: "EPYC CPUs & MI300X GPUs" },
+  { source: "AMD", target: "META", type: "supplier", label: "EPYC & Instinct AI compute" },
+  { source: "VERTIV", target: "MSFT", type: "supplier", label: "Liquid cooling & UPS" },
+  { source: "VERTIV", target: "CRWV", type: "supplier", label: "High-density rack cooling" },
+  { source: "EATON", target: "AMZN", type: "supplier", label: "Data center switchgear" },
+  { source: "SCHNEIDER", target: "GOOGL", type: "supplier", label: "Modular data center power" },
+  { source: "DELTA_EL", target: "AMZN", type: "supplier", label: "Server power shelves" },
+  { source: "WIWYNN", target: "META", type: "supplier", label: "Open Compute AI racks" },
+  { source: "WIWYNN", target: "MSFT", type: "supplier", label: "Azure AI server integration" },
+  { source: "EQUINIX", target: "MSFT", type: "partner", label: "ExpressRoute colocation" },
+  { source: "DIGITAL_REALTY", target: "AMZN", type: "partner", label: "Hyperscale data centers" },
+  { source: "EQUINIX", target: "CRWV", type: "partner", label: "GPU interconnection hubs" },
+  { source: "SMCI", target: "CRWV", type: "supplier", label: "Liquid-cooled GPU racks" },
+  { source: "SMCI", target: "NBIS", type: "supplier", label: "AI server racks" },
+  { source: "CEG", target: "MSFT", type: "supplier", label: "24/7 nuclear clean power" },
+  { source: "AEP", target: "AMZN", type: "supplier", label: "Data center grid power" },
+  { source: "XEL", target: "GOOGL", type: "supplier", label: "Clean grid PPA power" },
+  { source: "NVDA", target: "CRUSOE", type: "customer", label: "AI cloud GPU buyer" },
+  { source: "NVDA", target: "LAMBDA_LABS", type: "customer", label: "GPU cluster operator" },
+  { source: "MSFT", target: "OPENAI", type: "partner", label: "Azure AI exclusivity & compute" },
+  { source: "AMZN", target: "ANTHROPIC", type: "partner", label: "AWS Bedrock & Trainium" },
+  { source: "GOOGL", target: "ANTHROPIC", type: "partner", label: "GCP TPU infrastructure" },
+  { source: "SCALE_AI", target: "META", type: "supplier", label: "LLM alignment & RLHF data" },
+  { source: "SCALE_AI", target: "MSFT", type: "supplier", label: "AI training datasets" },
+  { source: "SCALE_AI", target: "OPENAI", type: "supplier", label: "Model evaluation data" },
+  { source: "DATABRICKS", target: "MSFT", type: "partner", label: "Azure Databricks lakehouse" },
+  { source: "DATABRICKS", target: "AMZN", type: "partner", label: "AWS data & AI pipelines" },
+  { source: "DATABRICKS", target: "GOOGL", type: "partner", label: "GCP lakehouse integration" },
+  { source: "AMZN", target: "NFLX", type: "partner", label: "AWS streaming infrastructure" },
+  { source: "AMZN", target: "ABNB", type: "partner", label: "AWS global cloud hosting" },
+  { source: "GOOGL", target: "SHOP", type: "partner", label: "GCP commerce & Maps" },
+  { source: "AMZN", target: "ADBE", type: "partner", label: "AWS creative cloud" },
+  { source: "MSFT", target: "ADBE", type: "partner", label: "Azure enterprise AI" },
+  { source: "AMZN", target: "INTU", type: "partner", label: "AWS TurboTax/QB cloud" },
+  { source: "AMZN", target: "WDAY", type: "partner", label: "AWS HCM/ERP hosting" },
+  { source: "AMZN", target: "DDOG", type: "partner", label: "Cloud observability stack" },
+  { source: "MSFT", target: "PLTR", type: "partner", label: "Azure Gov & AIP cloud" },
+  { source: "AMZN", target: "PLTR", type: "partner", label: "AWS Foundry deployment" },
+  { source: "GOOGL", target: "APP", type: "partner", label: "GCP ad-tech compute" },
+  { source: "GOOGL", target: "DASH", type: "partner", label: "Maps routing & GCP" },
+  { source: "AMZN", target: "BKNG", type: "partner", label: "AWS travel platform" },
+  { source: "MSFT", target: "MSTR", type: "partner", label: "Azure BI cloud hosting" },
+  { source: "AMZN", target: "ROP", type: "partner", label: "Vertical SaaS cloud" },
+  { source: "MSFT", target: "TRI", type: "partner", label: "CoCounsel AI & Azure" },
+  { source: "AMZN", target: "TTWO", type: "partner", label: "Multiplayer game cloud" },
+  { source: "MSFT", target: "TTWO", type: "partner", label: "Xbox distribution & cloud" },
+  { source: "TTWO", target: "AAPL", type: "customer", label: "App Store mobile gaming" },
+  { source: "CRWD", target: "CRWV", type: "partner", label: "AI cloud workload security" },
+  { source: "CRWD", target: "NBIS", type: "partner", label: "Neocloud runtime defense" },
+  { source: "CRWD", target: "AMZN", type: "partner", label: "AWS cloud security" },
+  { source: "PANW", target: "GOOGL", type: "partner", label: "GCP cloud security" },
+  { source: "PANW", target: "MSFT", type: "partner", label: "Azure zero-trust network" },
+  { source: "TSMC", target: "FTNT", type: "supplier", label: "Custom FortiASIC chips" },
+  { source: "FLEX_LTD", target: "FTNT", type: "supplier", label: "Firewall appliance assembly" },
+  { source: "JABIL", target: "CSCO", type: "supplier", label: "Router & switch assembly" },
+  { source: "FLEX_LTD", target: "CSCO", type: "supplier", label: "Network hardware EMS" },
+  { source: "LONZA", target: "MRNA", type: "supplier", label: "mRNA drug substance CDMO" },
+  { source: "CATALENT", target: "MRNA", type: "supplier", label: "Sterile vial fill-finish" },
+  { source: "ALDEVRON", target: "MRNA", type: "supplier", label: "Plasmid DNA & capping enzymes" },
+  { source: "THERMO_FISHER", target: "AMGN", type: "supplier", label: "Biologics CDMO & reagents" },
+  { source: "LONZA", target: "AMGN", type: "supplier", label: "Mammalian cell manufacturing" },
+  { source: "WEST_PHARMA", target: "AMGN", type: "supplier", label: "Injectable vial components" },
+  { source: "SARTORIUS", target: "GILD", type: "supplier", label: "Bioreactors & filtration" },
+  { source: "SAMSUNG_BIO", target: "GILD", type: "supplier", label: "Biologics CDMO capacity" },
+  { source: "DANAHER", target: "GILD", type: "supplier", label: "Cytiva bioprocess tech" },
+  { source: "LONZA", target: "VRTX", type: "supplier", label: "Cell/gene therapy CDMO" },
+  { source: "CATALENT", target: "VRTX", type: "supplier", label: "Commercial fill-finish" },
+  { source: "SAMSUNG_BIO", target: "REGN", type: "supplier", label: "Biologic antibody CDMO" },
+  { source: "SANOFI", target: "REGN", type: "partner", label: "Dupixent biologics alliance" },
+  { source: "WEST_PHARMA", target: "REGN", type: "supplier", label: "Sterile injector seals" },
+  { source: "NOVARTIS", target: "ALNY", type: "partner", label: "RNAi co-development" },
+  { source: "SANOFI", target: "ALNY", type: "partner", label: "Rare disease RNAi partner" },
+  { source: "ALDEVRON", target: "ALNY", type: "supplier", label: "Oligonucleotide synthesis" },
+  { source: "DXCM", target: "MCKESSON", type: "customer", label: "CGM wholesale distribution" },
+  { source: "DXCM", target: "CARDINAL_H", type: "customer", label: "CGM medical supply" },
+  { source: "DXCM", target: "CENCORA", type: "customer", label: "Pharmacy CGM channel" },
+  { source: "DXCM", target: "BYRAM_HC", type: "customer", label: "Direct-to-patient CGM" },
+  { source: "DXCM", target: "CCS_MED", type: "customer", label: "Diabetes device delivery" },
+  { source: "TANDEM", target: "DXCM", type: "partner", label: "Closed-loop insulin pump" },
+  { source: "INSULET", target: "DXCM", type: "partner", label: "Omnipod CGM integration" },
+  { source: "TXN", target: "ISRG", type: "supplier", label: "Robotic precision ICs" },
+  { source: "PRIV_AERO_SHOPS", target: "ISRG", type: "supplier", label: "Surgical arm micro-optics" },
+  { source: "ISRG", target: "HCA_HC", type: "customer", label: "da Vinci surgical systems" },
+  { source: "GEHC", target: "HCA_HC", type: "customer", label: "MRI & CT hospital systems" },
+  { source: "AMZN", target: "GEHC", type: "partner", label: "AWS Edison health AI" },
+  { source: "ADI", target: "GEHC", type: "supplier", label: "Ultrasound & CT analog ICs" },
+  { source: "THERMO_FISHER", target: "IDXX", type: "supplier", label: "Diagnostic lab reagents" },
+  { source: "CORNING", target: "IDXX", type: "supplier", label: "Lab assay consumables" },
+  { source: "PANASONIC_E", target: "TSLA", type: "supplier", label: "2170/4680 EV battery cells" },
+  { source: "CATL", target: "TSLA", type: "supplier", label: "LFP & Megapack cells" },
+  { source: "LG_ENERGY", target: "TSLA", type: "supplier", label: "EV battery cells" },
+  { source: "ALBEMARLE", target: "TSLA", type: "supplier", label: "Battery-grade lithium" },
+  { source: "STMICRO", target: "TSLA", type: "supplier", label: "SiC powertrain inverters" },
+  { source: "ONSEMI", target: "TSLA", type: "supplier", label: "SiC chips & vision sensors" },
+  { source: "APTIV", target: "TSLA", type: "supplier", label: "High-voltage wiring" },
+  { source: "NVDA", target: "TSLA", type: "supplier", label: "AI training GPUs" },
+  { source: "BOSCH_GMBH", target: "TSLA", type: "supplier", label: "Radar & braking actuators" },
+  { source: "CUMMINS", target: "PCAR", type: "supplier", label: "Heavy-duty truck engines" },
+  { source: "MAGNA", target: "PCAR", type: "supplier", label: "Chassis & cab systems" },
+  { source: "AXALTA", target: "PCAR", type: "supplier", label: "Commercial truck coatings" },
+  { source: "HORTON", target: "PCAR", type: "supplier", label: "Engine cooling fans" },
+  { source: "CONMET", target: "PCAR", type: "supplier", label: "Wheel hubs & castings" },
+  { source: "FRITZ_WINTER", target: "PCAR", type: "supplier", label: "Iron engine & brake castings" },
+  { source: "BERGSTROM", target: "PCAR", type: "supplier", label: "Truck cab HVAC" },
+  { source: "BOSCH_GMBH", target: "PCAR", type: "supplier", label: "Commercial ADAS & fuel" },
+  { source: "PRIV_AERO_SHOPS", target: "RKLB", type: "supplier", label: "Carbon composite tanks" },
+  { source: "TE_CONN", target: "RKLB", type: "supplier", label: "Radiation-hardened connectors" },
+  { source: "RKLB", target: "LMT", type: "customer", label: "Spacecraft & defense launches" },
+  { source: "AMZN", target: "AXON", type: "partner", label: "AWS Evidence.com cloud" },
+  { source: "PRIV_EMS_AXON", target: "AXON", type: "supplier", label: "TASER & bodycam assembly" },
+  { source: "QCOM", target: "AXON", type: "supplier", label: "Bodycam cellular & AI SoCs" },
+  { source: "TXN", target: "HON", type: "supplier", label: "Industrial & aerospace ICs" },
+  { source: "ADI", target: "HON", type: "supplier", label: "Avionics sensors & chips" },
+  { source: "TE_CONN", target: "HON", type: "supplier", label: "Aerospace harnesses" },
+  { source: "ARROW", target: "HON", type: "supplier", label: "Electronic components" },
+  { source: "CFM_INTL", target: "HON", type: "partner", label: "Commercial avionics" },
+  { source: "HON", target: "LMT", type: "customer", label: "Defense avionics & propulsion" },
+  { source: "AEP", target: "LIN", type: "supplier", label: "Industrial plant power" },
+  { source: "EXC", target: "LIN", type: "supplier", label: "Grid electricity supply" },
+  { source: "CSX", target: "LIN", type: "logistics", label: "Liquid gas rail tank cars" },
+  { source: "LIN", target: "TSMC", type: "supplier", label: "Ultra-pure fab gases" },
+  { source: "LIN", target: "INTC", type: "supplier", label: "Semiconductor specialty gases" },
+  { source: "VULCAN_MAT", target: "FER", type: "supplier", label: "Highway aggregates & asphalt" },
+  { source: "NUCOR", target: "FER", type: "supplier", label: "Structural bridge steel" },
+  { source: "ADSK", target: "FER", type: "partner", label: "BIM civil engineering" },
+  { source: "ODFL", target: "FAST", type: "logistics", label: "LTL fastener distribution" },
+  { source: "FAST", target: "PCAR", type: "supplier", label: "MRO fasteners & factory bins" },
+  { source: "FAST", target: "CSX", type: "supplier", label: "Rail yard MRO hardware" },
+  { source: "CTAS", target: "PCAR", type: "supplier", label: "Uniforms & facility safety" },
+  { source: "CTAS", target: "WMT", type: "supplier", label: "DC facility & safety supplies" },
+  { source: "CTAS", target: "CPRT", type: "supplier", label: "Auction yard uniforms" },
+  { source: "ODFL", target: "CPRT", type: "logistics", label: "Salvage vehicle logistics" },
+  { source: "ORLY", target: "CPRT", type: "partner", label: "Aftermarket parts ecosystem" },
+  { source: "MAGNA", target: "ORLY", type: "supplier", label: "Replacement auto parts" },
+  { source: "BOSCH_GMBH", target: "ORLY", type: "supplier", label: "Brake, wiper & sensor parts" },
+  { source: "PG", target: "WMT", type: "supplier", label: "Household & personal care" },
+  { source: "UNILEVER", target: "WMT", type: "supplier", label: "Consumer foods & care" },
+  { source: "PEP", target: "WMT", type: "supplier", label: "Snacks & beverages" },
+  { source: "MDLZ", target: "WMT", type: "supplier", label: "Biscuits & confectionery" },
+  { source: "KDP", target: "WMT", type: "supplier", label: "Coffee pods & soft drinks" },
+  { source: "MNST", target: "WMT", type: "supplier", label: "Energy beverages" },
+  { source: "SCHREIBER", target: "WMT", type: "supplier", label: "Great Value dairy & cheese" },
+  { source: "PRIVATE_LABEL_MFG", target: "WMT", type: "supplier", label: "Great Value co-packers" },
+  { source: "AVERY_DENN", target: "WMT", type: "supplier", label: "Apparel & pallet RFID tags" },
+  { source: "JBHUNT", target: "WMT", type: "logistics", label: "Dedicated intermodal freight" },
+  { source: "PG", target: "COST", type: "supplier", label: "Bulk household staples" },
+  { source: "KO", target: "COST", type: "supplier", label: "Beverage portfolio" },
+  { source: "PEP", target: "COST", type: "supplier", label: "Frito-Lay & beverages" },
+  { source: "MARS_INC", target: "COST", type: "supplier", label: "Confectionery & pet food" },
+  { source: "SCHREIBER", target: "COST", type: "supplier", label: "Kirkland dairy & cheese" },
+  { source: "PRIVATE_LABEL_MFG", target: "COST", type: "supplier", label: "Kirkland Signature mills" },
+  { source: "CARGILL", target: "COST", type: "supplier", label: "Bulk protein & agri inputs" },
+  { source: "UPS", target: "AMZN", type: "logistics", label: "Parcel delivery network" },
+  { source: "PKG_CORP", target: "AMZN", type: "supplier", label: "Corrugated Prime boxes" },
+  { source: "INTL_PAPER", target: "AMZN", type: "supplier", label: "Shipping containerboard" },
+  { source: "STRIPE", target: "AMZN", type: "partner", label: "AWS & checkout payments" },
+  { source: "PRIVATE_LABEL_MFG", target: "ROST", type: "supplier", label: "Off-price apparel vendors" },
+  { source: "AVERY_DENN", target: "ROST", type: "supplier", label: "Retail price & RFID labels" },
+  { source: "STRIPE", target: "SHOP", type: "partner", label: "Shopify Payments rails" },
+  { source: "FLEX_LTD", target: "SHOP", type: "supplier", label: "POS terminal hardware" },
+  { source: "D2C_PACK", target: "SHOP", type: "supplier", label: "Merchant mailers & boxes" },
+  { source: "STRIPE", target: "DASH", type: "partner", label: "Merchant & dasher payouts" },
+  { source: "D2C_PACK", target: "DASH", type: "supplier", label: "Food & DashMart packaging" },
+  { source: "VISA", target: "MELI", type: "partner", label: "Mercado Pago card rails" },
+  { source: "MASTERCARD", target: "MELI", type: "partner", label: "LatAm digital payments" },
+  { source: "D2C_PACK", target: "PDD", type: "supplier", label: "Temu cross-border mailers" },
+  { source: "FEDEX", target: "PDD", type: "logistics", label: "International air parcel" },
+  { source: "CARGILL", target: "PEP", type: "supplier", label: "Corn, oats & edible oils" },
+  { source: "BALL_CORP", target: "PEP", type: "supplier", label: "Aluminum beverage cans" },
+  { source: "CROWN_HOLD", target: "PEP", type: "supplier", label: "Metal cans & closures" },
+  { source: "PEP", target: "VARUN_BEV", type: "customer", label: "Intl franchise bottling" },
+  { source: "CARGILL", target: "MDLZ", type: "supplier", label: "Cocoa, wheat & palm oil" },
+  { source: "LOUIS_DREYFUS", target: "MDLZ", type: "supplier", label: "Sugar & agricultural inputs" },
+  { source: "PKG_CORP", target: "MDLZ", type: "supplier", label: "Snack cartons & cases" },
+  { source: "BALL_CORP", target: "KDP", type: "supplier", label: "Aluminum beverage cans" },
+  { source: "SUCAFINA", target: "KDP", type: "supplier", label: "Green coffee beans" },
+  { source: "KO", target: "MNST", type: "partner", label: "Global distribution alliance" },
+  { source: "BALL_CORP", target: "MNST", type: "supplier", label: "Aluminum energy cans" },
+  { source: "KO", target: "CCEP", type: "supplier", label: "Beverage concentrate & IP" },
+  { source: "CROWN_HOLD", target: "CCEP", type: "supplier", label: "European beverage cans" },
+  { source: "OLAM_GRP", target: "SBUX", type: "supplier", label: "Specialty coffee beans" },
+  { source: "ITOCHU", target: "SBUX", type: "supplier", label: "Coffee bean trading" },
+  { source: "LOUIS_DREYFUS", target: "SBUX", type: "supplier", label: "Coffee & sugar commodities" },
+  { source: "SUCAFINA", target: "SBUX", type: "supplier", label: "Traceable green coffee" },
+  { source: "TATACONSUM_S", target: "SBUX", type: "subsidiary", label: "Tata Starbucks India JV" },
+  { source: "WESTINGHOUSE", target: "CEG", type: "supplier", label: "Nuclear fuel & outages" },
+  { source: "CAMECO", target: "CEG", type: "supplier", label: "Uranium fuel supply" },
+  { source: "URENCO", target: "CEG", type: "supplier", label: "Uranium enrichment" },
+  { source: "GE_VERNOVA", target: "CEG", type: "supplier", label: "Steam & gas turbines" },
+  { source: "GE_VERNOVA", target: "AEP", type: "supplier", label: "Grid transformers & switchgear" },
+  { source: "EATON", target: "AEP", type: "supplier", label: "Substation distribution" },
+  { source: "GE_VERNOVA", target: "EXC", type: "supplier", label: "Grid substation systems" },
+  { source: "SCHNEIDER", target: "EXC", type: "supplier", label: "Grid automation software" },
+  { source: "GE_VERNOVA", target: "XEL", type: "supplier", label: "Wind turbines & grid tech" },
+  { source: "EATON", target: "XEL", type: "supplier", label: "Utility grid equipment" },
+  { source: "NUCOR", target: "BKR", type: "supplier", label: "Corrosion-resistant alloy steel" },
+  { source: "SLB", target: "FANG", type: "supplier", label: "Permian drilling & tech" },
+  { source: "HALLIBURTON", target: "FANG", type: "supplier", label: "Fracking & well completion" },
+  { source: "BKR", target: "FANG", type: "supplier", label: "Artificial lift & oilfield gear" },
+  { source: "EPD", target: "FANG", type: "logistics", label: "Permian midstream pipelines" },
+  { source: "PERMIAN_SAND", target: "FANG", type: "supplier", label: "Frac sand & rig contractors" },
+  { source: "NOKIA", target: "TMUS", type: "supplier", label: "5G RAN base stations" },
+  { source: "ERICSSON", target: "TMUS", type: "supplier", label: "5G core & radio gear" },
+  { source: "AMT", target: "TMUS", type: "supplier", label: "Wireless cell towers" },
+  { source: "CCI", target: "TMUS", type: "supplier", label: "Small cells & fiber" },
+  { source: "SPACEX", target: "TMUS", type: "partner", label: "Starlink Direct-to-Cell" },
+  { source: "AAPL", target: "TMUS", type: "supplier", label: "iPhone carrier flagship" },
+  { source: "CSCO", target: "CMCSA", type: "supplier", label: "DOCSIS & core routing" },
+  { source: "CORNING", target: "CMCSA", type: "supplier", label: "Broadband optical fiber" },
+  { source: "PRIV_FIBER", target: "CMCSA", type: "supplier", label: "Regional metro fiber" },
+  { source: "JBHUNT", target: "CSX", type: "partner", label: "East Coast intermodal rail" },
+  { source: "UNION_PAC", target: "CSX", type: "partner", label: "Transcontinental rail interchange" },
+  { source: "CUMMINS", target: "ODFL", type: "supplier", label: "Heavy LTL tractor engines" },
+  { source: "PCAR", target: "ODFL", type: "supplier", label: "Kenworth & Peterbilt fleet" },
+  { source: "VISA", target: "PYPL", type: "partner", label: "Card network & Venmo rails" },
+  { source: "MASTERCARD", target: "PYPL", type: "partner", label: "Global checkout rails" },
+  { source: "VISA", target: "ADP", type: "partner", label: "Wisely payroll cards" },
+  { source: "AMZN", target: "ADP", type: "partner", label: "AWS global payroll cloud" },
+  { source: "INTUITIVE_QBO", target: "PAYX", type: "partner", label: "SMB accounting integration" },
+  { source: "INTU", target: "PAYX", type: "partner", label: "QuickBooks payroll sync" },
+  { source: "HOSP_VENDORS", target: "MAR", type: "supplier", label: "Hotel linen & F&B supplies" },
+  { source: "STRIPE", target: "ABNB", type: "partner", label: "Global host & guest payouts" },
+  { source: "VISA", target: "BKNG", type: "partner", label: "Travel card payments" },
+];
+
+// ════════════════════════════════════════════════════════════
+//  DATASET BUILDERS FOR MODES: nifty | nasdaq | combined
+// ════════════════════════════════════════════════════════════
+const COMBINED_ALIASES = {
+  AWS: "AMZN",
+  MSFT_AZURE: "MSFT",
+  GOOGLE: "GOOGL",
+  QUALCOMM: "QCOM",
+  ADOBE_G: "ADBE",
+  INTEL_G: "INTC",
+  INTUITIVE_SURG: "ISRG",
+  GE_HEALTHCARE: "GEHC",
+  TATACONSUM_S: "TATACONSUM",
+  NOKIA_NW: "NOKIA",
+};
+
+function buildDataset(mode) {
+  if (mode === "nifty") {
+    const nodes = [
+      ...niftyAnchorsRaw.map(c => ({ ...c, group: "nifty" })),
+      ...niftySupplyRaw.map(c => ({ ...c, group: c.global ? "global" : (c.listed ? "listed" : "unlisted") }))
+    ];
+    return {
+      mode: "nifty",
+      title: "Nifty 50 Supply Chain Explorer",
+      searchPlaceholder: "Search Nifty 50, listed or unlisted companies...",
+      emptyMsg: "Click any Nifty 50 anchor node, listed/unlisted supplier, or sidebar item to inspect upstream vendors, subsidiaries, logistics, and downstream links.",
+      nodes,
+      links: niftyLinksRaw.map(l => ({ ...l })),
+      anchorGroups: ["nifty"],
+      groupMeta: {
+        nifty: { label: "Nifty 50", shortLabel: "Nifty 50", color: "#3b82f6", tagClass: "tag-nifty", radius: 16 },
+        listed: { label: "Listed (India)", shortLabel: "Listed", color: "#10b981", tagClass: "tag-listed", radius: 8.5 },
+        unlisted: { label: "Unlisted / Private", shortLabel: "Unlisted", color: "#f59e0b", tagClass: "tag-unlisted", radius: 8.5 },
+        global: { label: "Global", shortLabel: "Global", color: "#8b5cf6", tagClass: "tag-intl", radius: 10 },
+      },
+      statusOrder: ["nifty", "listed", "unlisted", "global"],
+      listingDropdown: [
+        { value: "all", label: "All Listing Types" },
+        { value: "listed", label: "Listed (India)" },
+        { value: "unlisted", label: "Unlisted / Private" },
+        { value: "global", label: "Global Partners" },
+      ],
+      interLabel: "Inter-Nifty",
+    };
+  }
+
+  if (mode === "nasdaq") {
+    const nodes = [
+      ...nasdaqAnchorsRaw.map(c => ({ ...c, group: "ndx" })),
+      ...nasdaqSupplyRaw.map(c => ({ ...c, group: c.listing }))
+    ];
+    return {
+      mode: "nasdaq",
+      title: "Nasdaq-100 Supply Chain Explorer",
+      searchPlaceholder: "Search Nasdaq-100, listed or private vendors...",
+      emptyMsg: "Click any Nasdaq-100 anchor node, listed US/global supplier, or private/unlisted vendor to explore upstream manufacturing, cloud alliances, logistics, and downstream buyers.",
+      nodes,
+      links: nasdaqLinksRaw.map(l => ({ ...l })),
+      anchorGroups: ["ndx"],
+      groupMeta: {
+        ndx: { label: "Nasdaq-100", shortLabel: "NDX-100", color: "#3b82f6", tagClass: "tag-ndx", radius: 14 },
+        listed_us: { label: "Listed (US)", shortLabel: "US Listed", color: "#10b981", tagClass: "tag-listed", radius: 8.5 },
+        listed_intl: { label: "Listed (Intl)", shortLabel: "Intl Listed", color: "#8b5cf6", tagClass: "tag-intl", radius: 9.5 },
+        unlisted: { label: "Unlisted / Private", shortLabel: "Unlisted", color: "#f59e0b", tagClass: "tag-unlisted", radius: 8.5 },
+      },
+      statusOrder: ["ndx", "listed_us", "listed_intl", "unlisted"],
+      listingDropdown: [
+        { value: "all", label: "All Listing Types" },
+        { value: "listed_us", label: "Listed (US)" },
+        { value: "listed_intl", label: "Listed (Intl)" },
+        { value: "unlisted", label: "Unlisted / Private" },
+      ],
+      interLabel: "Inter-NDX",
+    };
+  }
+
+  // COMBINED MODE: unify both indices + deduplicate overlapping entities
+  const nodeById = new Map();
+  // Anchors take precedence
+  niftyAnchorsRaw.forEach(c => nodeById.set(c.id, { ...c, group: "nifty" }));
+  nasdaqAnchorsRaw.forEach(c => nodeById.set(c.id, { ...c, group: "ndx" }));
+
+  // Add supply nodes unless aliased or already present as an anchor
+  const addSupplyNode = (c, isUnlisted) => {
+    const canonId = COMBINED_ALIASES[c.id] || c.id;
+    if (nodeById.has(canonId)) return;
+    nodeById.set(canonId, {
+      ...c,
+      id: canonId,
+      group: isUnlisted ? "unlisted" : "listed"
+    });
+  };
+  niftySupplyRaw.forEach(c => addSupplyNode(c, !c.listed));
+  nasdaqSupplyRaw.forEach(c => addSupplyNode(c, c.listing === "unlisted"));
+
+  // Merge links using canonical IDs and deduplicate identical edges
+  const linkSet = new Set();
+  const mergedLinks = [];
+  const pushLink = (l) => {
+    const s = COMBINED_ALIASES[l.source] || l.source;
+    const t = COMBINED_ALIASES[l.target] || l.target;
+    if (s === t) return;
+    const key = `${s}|${t}|${l.type}`;
+    if (linkSet.has(key)) return;
+    linkSet.add(key);
+    mergedLinks.push({ source: s, target: t, type: l.type, label: l.label });
+  };
+  niftyLinksRaw.forEach(pushLink);
+  nasdaqLinksRaw.forEach(pushLink);
+  // Cross-group subsidiary bridges
+  pushLink({ source: "BOSCH", target: "BOSCH_GMBH", type: "subsidiary", label: "Indian listed subsidiary" });
+  pushLink({ source: "HONEYWELL_UOP", target: "HON", type: "subsidiary", label: "Refining tech subsidiary" });
+
+  return {
+    mode: "combined",
+    title: "Global Supply Chain Explorer",
+    searchPlaceholder: "Search Nifty 50, Nasdaq-100, listed or private...",
+    emptyMsg: "Explore the combined Nifty 50 & Nasdaq-100 supply web. Click shared hubs like Amazon, Microsoft, Alphabet, Qualcomm, or Tata Consumer to trace cross-market links.",
+    nodes: Array.from(nodeById.values()),
+    links: mergedLinks,
+    anchorGroups: ["nifty", "ndx"],
+    groupMeta: {
+      nifty: { label: "Nifty 50", shortLabel: "Nifty 50", color: "#3b82f6", tagClass: "tag-nifty", radius: 14.5 },
+      ndx: { label: "Nasdaq-100", shortLabel: "NDX-100", color: "#06b6d4", tagClass: "tag-ndx", radius: 13.5 },
+      listed: { label: "Listed Suppliers", shortLabel: "Listed", color: "#10b981", tagClass: "tag-listed", radius: 8.5 },
+      unlisted: { label: "Unlisted / Private", shortLabel: "Unlisted", color: "#f59e0b", tagClass: "tag-unlisted", radius: 8.5 },
+    },
+    statusOrder: ["nifty", "ndx", "listed", "unlisted"],
+    listingDropdown: [
+      { value: "all", label: "All Listing Types" },
+      { value: "nifty", label: "Nifty 50 Anchors" },
+      { value: "ndx", label: "Nasdaq-100 Anchors" },
+      { value: "listed", label: "Listed Suppliers" },
+      { value: "unlisted", label: "Unlisted / Private" },
+    ],
+    interLabel: "Cross-Index",
+  };
+}
+
+// ════════════════════════════════════════════════════════════
+//  INTERACTIVE APPLICATION CONTROLLER
+// ════════════════════════════════════════════════════════════
+
+let currentMode = "nifty";
+let currentData = null;
+let nodeMap = new Map();
+let simulation = null;
+let linkSel = null;
+let nodeSel = null;
+let showLabels = true;
+let colorMode = "status";
+let selectedNode = null;
+let activeSectorFilters = new Set(["all"]);
+let activeStatusFilter = "all";
+let activeRelType = "all";
+let userInteracted = false;
+
+const graphContainer = document.getElementById("graph-container");
+const svg = d3.select("#graph-svg");
+const defs = svg.append("defs");
+
+const markerColors = {
+  supplier: "#3b82f6",
+  subsidiary: "#f59e0b",
+  partner: "#8b5cf6",
+  logistics: "#64748b",
+  customer: "#ec4899",
+  interanchor: "#6366f1"
+};
+Object.entries(markerColors).forEach(([key, color]) => {
+  defs.append("marker")
+    .attr("id", `arrow-${key}`)
+    .attr("viewBox", "0 -4 8 8")
+    .attr("refX", 17)
+    .attr("refY", 0)
+    .attr("markerWidth", 5)
+    .attr("markerHeight", 5)
+    .attr("orient", "auto")
+    .append("path")
+    .attr("d", "M0,-4L8,0L0,4")
+    .attr("fill", color)
+    .attr("opacity", 0.8);
+});
+
+const g = svg.append("g");
+const zoom = d3.zoom()
+  .scaleExtent([0.1, 5])
+  .on("zoom", (event) => g.attr("transform", event.transform));
+svg.call(zoom);
+svg.on("mousedown.track touchstart.track wheel.track", () => { userInteracted = true; });
+svg.on("click", () => { if (selectedNode) clearSelection(); });
+
+const tooltip = document.getElementById("tooltip");
+
+function getGraphSize() {
+  return {
+    width: Math.max(graphContainer.clientWidth || 600, 200),
+    height: Math.max(graphContainer.clientHeight || 500, 200)
+  };
+}
+
+function isAnchorNode(d) {
+  return currentData.anchorGroups.includes(d.group);
+}
+
+function nodeRadius(d) {
+  return (currentData.groupMeta[d.group] || { radius: 8.5 }).radius;
+}
+
+function nodeColor(d) {
+  if (colorMode === "sector") return getSectorColor(d.sector);
+  return (currentData.groupMeta[d.group] || { color: "#64748b" }).color;
+}
+
+function nodeStroke(d) {
+  if (isAnchorNode(d)) return colorMode === "status" ? getSectorColor(d.sector) : "#93c5fd";
+  return d3.color(nodeColor(d)).brighter(0.6);
+}
+
+function linkCategory(l) {
+  const s = typeof l.source === "object" ? l.source : nodeMap.get(l.source);
+  const t = typeof l.target === "object" ? l.target : nodeMap.get(l.target);
+  if (s && t && isAnchorNode(s) && isAnchorNode(t)) return "interanchor";
+  return l.type || "supplier";
+}
+
+function linkColor(l) {
+  return markerColors[linkCategory(l)] || "#3b82f6";
+}
+
+function getConnectionCount(id) {
+  return currentData.links.filter(l => {
+    const sid = typeof l.source === "object" ? l.source.id : l.source;
+    const tid = typeof l.target === "object" ? l.target.id : l.target;
+    return sid === id || tid === id;
+  }).length;
+}
+
+function switchIndex(mode) {
+  if (!["nifty", "nasdaq", "combined"].includes(mode)) mode = "nifty";
+  currentMode = mode;
+
+  // Update URL hash cleanly without adding noisy history entries
+  if (window.location.hash !== "#" + mode) {
+    history.replaceState(null, "", "#" + mode);
+  }
+
+  // Update switcher tab UI
+  document.querySelectorAll(".index-tab").forEach(btn => {
+    btn.classList.toggle("active", btn.dataset.index === mode);
+  });
+
+  // Stop existing simulation & clear graph layers
+  if (simulation) simulation.stop();
+  g.selectAll("*").remove();
+
+  // Reset filters & selection
+  selectedNode = null;
+  userInteracted = false;
+  activeSectorFilters = new Set(["all"]);
+  activeStatusFilter = "all";
+  activeRelType = "all";
+  document.getElementById("search-input").value = "";
+  document.getElementById("rel-type-select").value = "all";
+
+  // Build fresh dataset
+  currentData = buildDataset(mode);
+  nodeMap = new Map(currentData.nodes.map(n => [n.id, n]));
+
+  // Update texts & title
+  document.title = currentData.title;
+  document.getElementById("app-title").textContent = currentData.title;
+  document.getElementById("search-input").placeholder = currentData.searchPlaceholder;
+
+  // Render Header Stats
+  const counts = {};
+  currentData.statusOrder.forEach(k => { counts[k] = 0; });
+  currentData.nodes.forEach(n => { counts[n.group] = (counts[n.group] || 0) + 1; });
+
+  const statsEl = document.getElementById("header-stats");
+  statsEl.innerHTML = currentData.statusOrder.map(k => {
+    const m = currentData.groupMeta[k];
+    return `<span class="stat-pill" data-status="${k}" onclick="toggleStatusFilter('${k}')"><span class="dot" style="background:${m.color}"></span> <span>${counts[k]}</span> ${m.label}</span>`;
+  }).join("") +
+    `<span class="stat-pill static"><span class="dot" style="background:var(--text-muted)"></span> <span>${currentData.links.length}</span> Links</span>` +
+    `<button class="pane-toggle" id="toggle-detail-btn" onclick="toggleDetailPanel()" title="Toggle Detail Panel">Details</button>`;
+
+  // Render Listing Dropdown
+  const listSel = document.getElementById("listing-filter-select");
+  listSel.innerHTML = currentData.listingDropdown.map(o => `<option value="${o.value}">${o.label}</option>`).join("");
+  listSel.value = "all";
+
+  // Render Legend
+  const legendEl = document.getElementById("legend");
+  legendEl.innerHTML = currentData.statusOrder.map(k => {
+    const m = currentData.groupMeta[k];
+    return `<div class="legend-item"><div class="legend-dot" style="background:${m.color}"></div> ${m.label}</div>`;
+  }).join("") + `
+    <div class="legend-item"><div class="legend-line" style="background:var(--accent)"></div> Supply</div>
+    <div class="legend-item"><div class="legend-line" style="border-top:2px dashed var(--amber); height:0"></div> JV / Sub</div>
+    <div class="legend-item"><div class="legend-line" style="background:#6366f1"></div> ${currentData.interLabel}</div>
+  `;
+
+  // Render Sector Filter Pills
+  const anchors = currentData.nodes.filter(isAnchorNode);
+  const sectors = [...new Set(anchors.map(c => c.sector))].sort();
+  const sf = document.getElementById("sector-filters");
+  sf.innerHTML = `<button class="sector-btn active" data-sector="all">All Sectors</button>` +
+    sectors.map(s => `<button class="sector-btn" data-sector="${s}" style="border-color:${getSectorColor(s)}55">${s}</button>`).join("");
+  sf.scrollTop = 0;
+
+  // Render Empty Detail Panel & Sidebar List
+  clearSelection(true);
+  renderCompanyList(true);
+
+  // Build D3 Simulation
+  const { width, height } = getGraphSize();
+  const isCombined = mode === "combined";
+  simulation = d3.forceSimulation(currentData.nodes)
+    .alphaDecay(isCombined ? 0.032 : 0.025)
+    .force("link", d3.forceLink(currentData.links).id(d => d.id).distance(d => {
+      const s = typeof d.source === "object" ? d.source : nodeMap.get(d.source);
+      const t = typeof d.target === "object" ? d.target : nodeMap.get(d.target);
+      if (s && t && isAnchorNode(s) && isAnchorNode(t)) return isCombined ? 185 : 165;
+      return isCombined ? 105 : 95;
+    }).strength(0.45))
+    .force("charge", d3.forceManyBody().strength(d => isAnchorNode(d) ? (isCombined ? -310 : -350) : -125))
+    .force("center", d3.forceCenter(width / 2, height / 2))
+    .force("collision", d3.forceCollide().radius(d => nodeRadius(d) + 7))
+    .force("x", d3.forceX(width / 2).strength(0.035))
+    .force("y", d3.forceY(height / 2).strength(0.035));
+
+  linkSel = g.append("g")
+    .selectAll("line")
+    .data(currentData.links)
+    .join("line")
+    .attr("class", "link")
+    .attr("stroke", linkColor)
+    .attr("stroke-width", d => linkCategory(d) === "interanchor" ? 1.7 : 1.1)
+    .attr("stroke-dasharray", d => d.type === "subsidiary" ? "4,3" : null)
+    .attr("marker-end", d => `url(#arrow-${linkCategory(d)})`);
+
+  nodeSel = g.append("g")
+    .selectAll("g")
+    .data(currentData.nodes)
+    .join("g")
+    .attr("class", "node")
+    .call(d3.drag()
+      .on("start", dragStarted)
+      .on("drag", dragged)
+      .on("end", dragEnded));
+
+  nodeSel.append("circle")
+    .attr("r", nodeRadius)
+    .attr("fill", nodeColor)
+    .attr("stroke", nodeStroke)
+    .attr("stroke-width", d => isAnchorNode(d) ? 2.4 : 1.4)
+    .on("mouseover", handleMouseOver)
+    .on("mouseout", handleMouseOut)
+    .on("click", (event, d) => {
+      event.stopPropagation();
+      selectNode(d.id);
+    });
+
+  nodeSel.append("text")
+    .attr("dy", d => nodeRadius(d) + 11)
+    .text(d => isAnchorNode(d) ? d.symbol : (d.name.length > 18 ? d.name.substring(0, 16) + "…" : d.name))
+    .style("font-size", d => isAnchorNode(d) ? "9.5px" : "7.5px")
+    .style("font-weight", d => isAnchorNode(d) ? "700" : "400")
+    .style("fill", d => isAnchorNode(d) ? "#e2e8f0" : "#94a3b8")
+    .style("display", () => showLabels ? "block" : "none");
+
+  simulation.on("tick", () => {
+    linkSel
+      .attr("x1", d => d.source.x)
+      .attr("y1", d => d.source.y)
+      .attr("x2", d => d.target.x)
+      .attr("y2", d => d.target.y);
+    nodeSel.attr("transform", d => `translate(${d.x},${d.y})`);
+  });
+
+  simulation.on("end", () => {
+    if (!selectedNode && !userInteracted) fitNodesToView(null);
+  });
+
+  setTimeout(() => {
+    if (!selectedNode && !userInteracted && currentMode === mode) fitNodesToView(null);
+  }, 700);
+}
+
+// ── SECTOR & DROPDOWN EVENTS ──
+document.getElementById("sector-filters").addEventListener("click", e => {
+  if (!e.target.classList.contains("sector-btn")) return;
+  const sf = document.getElementById("sector-filters");
+  const sector = e.target.dataset.sector;
+  if (sector === "all") {
+    activeSectorFilters = new Set(["all"]);
+    sf.querySelectorAll(".sector-btn").forEach(b => b.classList.remove("active"));
+    e.target.classList.add("active");
+  } else {
+    activeSectorFilters.delete("all");
+    sf.querySelector('[data-sector="all"]').classList.remove("active");
+    if (activeSectorFilters.has(sector)) {
+      activeSectorFilters.delete(sector);
+      e.target.classList.remove("active");
+      if (activeSectorFilters.size === 0) {
+        activeSectorFilters.add("all");
+        sf.querySelector('[data-sector="all"]').classList.add("active");
+      }
+    } else {
+      activeSectorFilters.add(sector);
+      e.target.classList.add("active");
+    }
+  }
+
+  if (selectedNode) {
+    const sel = nodeMap.get(selectedNode);
+    if (sel && !activeSectorFilters.has("all") && !activeSectorFilters.has(sel.sector)) {
+      clearSelection(true);
+    }
+  }
+
+  renderCompanyList(true);
+  const visibleNodes = updateGraphFilter();
+  if (!selectedNode) fitNodesToView(visibleNodes);
+});
+
+document.getElementById("rel-type-select").addEventListener("change", e => {
+  activeRelType = e.target.value;
+  updateGraphFilter();
+  if (selectedNode) highlightConnections(selectedNode);
+});
+
+document.getElementById("listing-filter-select").addEventListener("change", e => {
+  setStatusFilter(e.target.value);
+});
+
+document.getElementById("search-input").addEventListener("input", () => {
+  renderCompanyList(true);
+  updateGraphFilter();
+});
+
+function toggleStatusFilter(status) {
+  setStatusFilter(activeStatusFilter === status ? "all" : status);
+}
+
+function setStatusFilter(status) {
+  activeStatusFilter = status;
+  document.querySelectorAll(".stat-pill[data-status]").forEach(el => {
+    el.classList.toggle("active-status", el.dataset.status === status);
+  });
+  const sel = document.getElementById("listing-filter-select");
+  if (Array.from(sel.options).some(o => o.value === status)) {
+    sel.value = status;
+  } else {
+    sel.value = "all";
+  }
+  renderCompanyList(true);
+  const visibleNodes = updateGraphFilter();
+  if (!selectedNode) fitNodesToView(visibleNodes);
+}
+
+// ── SIDEBAR COMPANY LIST ──
+function renderCompanyList(resetScroll = false) {
+  const containerEl = document.getElementById("company-list");
+  const search = document.getElementById("search-input").value.trim().toLowerCase();
+
+  const anchors = currentData.nodes.filter(isAnchorNode);
+  const supplies = currentData.nodes.filter(n => !isAnchorNode(n));
+
+  let html = "";
+  // Render each anchor group section
+  currentData.anchorGroups.forEach(grp => {
+    if (activeStatusFilter !== "all" && activeStatusFilter !== grp) return;
+    const filtered = anchors.filter(c => {
+      if (c.group !== grp) return false;
+      const matchSector = activeSectorFilters.has("all") || activeSectorFilters.has(c.sector);
+      const matchSearch = !search || c.name.toLowerCase().includes(search) || c.symbol.toLowerCase().includes(search) || c.sector.toLowerCase().includes(search);
+      return matchSector && matchSearch;
+    });
+    if (filtered.length > 0) {
+      const m = currentData.groupMeta[grp];
+      html += `<div class="list-section-header">${m.label} Anchors (${filtered.length})</div>`;
+      html += filtered.map(c => `
+        <div class="company-item ${selectedNode === c.id ? 'active' : ''}" data-id="${c.id}" onclick="selectNode('${c.id}')">
+          <div class="icon" style="background:${getSectorColor(c.sector)}22;color:${getSectorColor(c.sector)}">
+            ${c.symbol.substring(0, 3)}
+          </div>
+          <div class="info">
+            <div class="name">${c.name}</div>
+            <div class="sector-label">${c.symbol} • ${c.sector}</div>
+          </div>
+          <div class="badge">${getConnectionCount(c.id)}</div>
+        </div>
+      `).join("");
+    }
+  });
+
+  // Render matching non-anchor supply chain companies when searching or filtering by supply status
+  const isSupplyStatus = !currentData.anchorGroups.includes(activeStatusFilter) && activeStatusFilter !== "all";
+  if (search || isSupplyStatus) {
+    const matchingSupply = supplies.filter(c => {
+      const matchStatus = activeStatusFilter === "all" || activeStatusFilter === c.group;
+      const matchSector = activeSectorFilters.has("all") || activeSectorFilters.has(c.sector);
+      const matchSearch = !search || c.name.toLowerCase().includes(search) || (c.desc && c.desc.toLowerCase().includes(search));
+      return matchStatus && matchSector && matchSearch;
+    });
+    if (matchingSupply.length > 0) {
+      const hdr = isSupplyStatus ? currentData.groupMeta[activeStatusFilter].label : "Supply Chain Matches";
+      html += `<div class="list-section-header">${hdr} (${matchingSupply.length})</div>`;
+      html += matchingSupply.map(c => {
+        const m = currentData.groupMeta[c.group];
+        return `
+          <div class="company-item ${selectedNode === c.id ? 'active' : ''}" data-id="${c.id}" onclick="selectNode('${c.id}')">
+            <div class="icon" style="background:${m.color}22;color:${m.color}">
+              ${c.name.substring(0, 2).toUpperCase()}
+            </div>
+            <div class="info">
+              <div class="name">${c.name}</div>
+              <div class="sector-label">${m.shortLabel} • ${c.sector}</div>
+            </div>
+            <div class="badge">${getConnectionCount(c.id)}</div>
+          </div>
+        `;
+      }).join("");
+    }
+  }
+
+  if (!html) {
+    html = `<div style="padding:24px 16px;text-align:center;color:var(--text-muted);font-size:12px;">No matching companies found.</div>`;
+  }
+
+  containerEl.innerHTML = html;
+  if (resetScroll) containerEl.scrollTop = 0;
+}
+
+// ── TOOLTIP ──
+function handleMouseOver(event, d) {
+  tooltip.style.display = "block";
+  tooltip.querySelector(".tt-name").textContent = d.name;
+  const m = currentData.groupMeta[d.group];
+  const info = [d.sector, m ? m.label : ""];
+  if (d.desc) info.push(d.desc);
+  tooltip.querySelector(".tt-info").textContent = info.filter(Boolean).join(" • ");
+
+  const x = Math.min(event.clientX + 16, window.innerWidth - 285);
+  const y = Math.min(event.clientY - 12, window.innerHeight - 105);
+  tooltip.style.left = x + "px";
+  tooltip.style.top = Math.max(8, y) + "px";
+}
+
+function handleMouseOut() {
+  tooltip.style.display = "none";
+}
+
+function syncOverlayClasses() {
+  const ws = document.getElementById("workspace");
+  const isNarrow = window.innerWidth <= 1050;
+  const sbOpen = !document.getElementById("sidebar").classList.contains("collapsed");
+  const dpOpen = !document.getElementById("detail-panel").classList.contains("collapsed");
+  ws.classList.toggle("sidebar-overlay-open", isNarrow && sbOpen);
+  ws.classList.toggle("detail-overlay-open", isNarrow && dpOpen);
+}
+
+// ── NODE SELECTION & CAMERA ──
+function selectNode(id) {
+  userInteracted = true;
+  selectedNode = id;
+  const d = nodeMap.get(id);
+  if (!d) return;
+
+  const dp = document.getElementById("detail-panel");
+  if (dp.classList.contains("collapsed")) dp.classList.remove("collapsed");
+  if (window.innerWidth <= 1050) document.getElementById("sidebar").classList.add("collapsed");
+  syncOverlayClasses();
+
+  renderCompanyList(false);
+  highlightConnections(id);
+  renderDetailPanel(d);
+
+  const targetNode = currentData.nodes.find(n => n.id === id);
+  if (targetNode && targetNode.x != null) {
+    const { width, height } = getGraphSize();
+    const overlayRight = (window.innerWidth <= 1050 && !dp.classList.contains("collapsed")) ? Math.min(330, window.innerWidth * 0.88) : 0;
+    const visibleWidth = Math.max(width - overlayRight, 180);
+    const transform = d3.zoomTransform(svg.node());
+    const scale = Math.max(transform.k, 1.1);
+    const tx = visibleWidth / 2 - targetNode.x * scale;
+    const ty = height / 2 - targetNode.y * scale;
+    svg.transition().duration(480).call(
+      zoom.transform,
+      d3.zoomIdentity.translate(tx, ty).scale(scale)
+    );
+  }
+}
+
+function fitNodesToView(targetIds) {
+  if (!currentData) return;
+  const subset = targetIds && targetIds.size > 0
+    ? currentData.nodes.filter(n => targetIds.has(n.id) && n.x != null)
+    : currentData.nodes.filter(n => n.x != null);
+  if (subset.length === 0) return;
+
+  const { width, height } = getGraphSize();
+  const xs = subset.map(n => n.x);
+  const ys = subset.map(n => n.y);
+  const minX = Math.min(...xs) - 55;
+  const maxX = Math.max(...xs) + 55;
+  const minY = Math.min(...ys) - 55;
+  const maxY = Math.max(...ys) + 55;
+  const dx = Math.max(maxX - minX, 120);
+  const dy = Math.max(maxY - minY, 120);
+  const scale = Math.min(1.5, Math.max(0.16, 0.85 / Math.max(dx / width, dy / height)));
+  const cx = (minX + maxX) / 2;
+  const cy = (minY + maxY) / 2;
+  const tx = width / 2 - cx * scale;
+  const ty = height / 2 - cy * scale;
+
+  svg.transition().duration(520).call(
+    zoom.transform,
+    d3.zoomIdentity.translate(tx, ty).scale(scale)
+  );
+}
+
+function highlightConnections(id) {
+  const connectedIds = new Set([id]);
+  const connectedLinks = new Set();
+
+  currentData.links.forEach((l, i) => {
+    if (activeRelType !== "all" && l.type !== activeRelType) return;
+    const sid = typeof l.source === "object" ? l.source.id : l.source;
+    const tid = typeof l.target === "object" ? l.target.id : l.target;
+    if (sid === id || tid === id) {
+      connectedIds.add(sid);
+      connectedIds.add(tid);
+      connectedLinks.add(i);
+    }
+  });
+
+  nodeSel.classed("highlighted", d => d.id === id)
+    .classed("dimmed", d => !connectedIds.has(d.id))
+    .style("opacity", null);
+  linkSel.classed("highlighted", (d, i) => connectedLinks.has(i))
+    .classed("dimmed", (d, i) => !connectedLinks.has(i))
+    .style("opacity", null);
+}
+
+function clearHighlight() {
+  if (!nodeSel || !linkSel) return;
+  nodeSel.classed("highlighted", false).classed("dimmed", false);
+  linkSel.classed("highlighted", false).classed("dimmed", false);
+}
+
+function getStatusBadgeHtml(d) {
+  const m = currentData.groupMeta[d.group] || { tagClass: "tag-listed", label: d.group };
+  return `<span class="detail-tag ${m.tagClass}">${m.label}</span>`;
+}
+
+function getShortStatusBadge(d) {
+  const m = currentData.groupMeta[d.group] || { tagClass: "tag-listed", shortLabel: d.group };
+  return `<span class="sc-status ${m.tagClass}">${m.shortLabel}</span>`;
+}
+
+function renderDetailPanel(d) {
+  const panel = document.getElementById("detail-content");
+
+  const relatedLinks = currentData.links.filter(l => {
+    const sid = typeof l.source === "object" ? l.source.id : l.source;
+    const tid = typeof l.target === "object" ? l.target.id : l.target;
+    return sid === d.id || tid === d.id;
+  });
+
+  const upstreamSuppliers = [];
+  const downstreamCustomers = [];
+  const subsidiaries = [];
+  const parentGroups = [];
+  const partners = [];
+  const logisticsProviders = [];
+  const logisticsClients = [];
+
+  relatedLinks.forEach(l => {
+    const sid = typeof l.source === "object" ? l.source.id : l.source;
+    const tid = typeof l.target === "object" ? l.target.id : l.target;
+    const isIncoming = tid === d.id;
+    const otherId = isIncoming ? sid : tid;
+    const other = nodeMap.get(otherId);
+    if (!other) return;
+    const item = { ...other, linkLabel: l.label, linkType: l.type };
+
+    if (l.type === "supplier") {
+      if (isIncoming) upstreamSuppliers.push(item);
+      else downstreamCustomers.push(item);
+    } else if (l.type === "customer") {
+      if (!isIncoming) downstreamCustomers.push(item);
+      else upstreamSuppliers.push(item);
+    } else if (l.type === "subsidiary") {
+      if (isIncoming) subsidiaries.push(item);
+      else parentGroups.push(item);
+    } else if (l.type === "logistics") {
+      if (isIncoming) logisticsProviders.push(item);
+      else logisticsClients.push(item);
+    } else if (l.type === "partner") {
+      partners.push(item);
+    }
+  });
+
+  function renderSection(title, items) {
+    if (items.length === 0) return "";
+    return `
+      <div class="detail-section">
+        <h3>${title} (${items.length})</h3>
+        ${items.map(it => `
+          <div class="supply-chain-item" onclick="selectNode('${it.id}')">
+            <div class="sc-dot" style="background:${nodeColor(it)}"></div>
+            <div class="sc-main">
+              <div class="sc-name">${it.name}</div>
+              <div class="sc-sub">${it.linkLabel || it.linkType}</div>
+            </div>
+            ${getShortStatusBadge(it)}
+          </div>
+        `).join("")}
+      </div>
+    `;
+  }
+
+  const exchangeLine = d.symbol ? ` • ${d.exchange || "Ticker"}: ${d.symbol}` : "";
+  panel.innerHTML = `
+    <div class="detail-header">
+      <div class="detail-icon" style="background:${nodeColor(d)}22;color:${nodeColor(d)}">
+        ${(d.symbol || d.name).substring(0, 3).toUpperCase()}
+      </div>
+      <div>
+        <div class="detail-title">${d.name}</div>
+        <div class="detail-subtitle">${d.sector}${exchangeLine}</div>
+      </div>
+    </div>
+    <div class="detail-tags" style="margin-bottom:14px;">
+      ${getStatusBadgeHtml(d)}
+      <span class="detail-tag" style="background:${getSectorColor(d.sector)}20;color:${getSectorColor(d.sector)}">${d.sector}</span>
+    </div>
+    ${d.desc ? `<p style="font-size:12px;color:var(--text-secondary);margin-bottom:16px;line-height:1.5;">${d.desc}</p>` : ''}
+    ${renderSection("Upstream Suppliers & Manufacturing", upstreamSuppliers)}
+    ${renderSection("Subsidiaries & Joint Ventures", subsidiaries)}
+    ${renderSection("Parent / Holding Group", parentGroups)}
+    ${renderSection("Cloud, Tech & Strategic Partners", partners)}
+    ${renderSection("Logistics & 3PL Providers", logisticsProviders)}
+    ${renderSection("Supplies To / Downstream Buyers", [...downstreamCustomers, ...logisticsClients])}
+    <div style="margin-top:18px;text-align:center;">
+      <button onclick="clearSelection()" style="padding:7px 16px;border-radius:6px;background:var(--bg-card);border:1px solid #2b384e;color:var(--text-secondary);cursor:pointer;font-size:12px;">
+        Clear Selection
+      </button>
+    </div>
+  `;
+}
+
+function clearSelection(skipRenderList = false) {
+  selectedNode = null;
+  clearHighlight();
+  updateGraphFilter();
+  if (!skipRenderList) renderCompanyList(false);
+  document.getElementById("detail-content").innerHTML = `
+    <div class="empty-state">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+        <circle cx="12" cy="12" r="10"/><path d="M12 8v4m0 4h.01"/>
+      </svg>
+      <p>${currentData.emptyMsg}</p>
+    </div>
+  `;
+}
+
+function updateGraphFilter() {
+  if (!currentData || !nodeSel || !linkSel) return null;
+  const search = document.getElementById("search-input").value.trim().toLowerCase();
+  const matchingSectors = activeSectorFilters.has("all") ? null : activeSectorFilters;
+  const relType = activeRelType;
+  const statusFilter = activeStatusFilter;
+
+  linkSel.style("display", l => {
+    if (relType !== "all" && l.type !== relType) return "none";
+    return "block";
+  });
+
+  const hasFilter = Boolean(matchingSectors || search || statusFilter !== "all" || relType !== "all");
+  if (!hasFilter) {
+    if (!selectedNode) {
+      nodeSel.style("opacity", 1);
+      linkSel.style("opacity", 0.34);
+    }
+    return null;
+  }
+
+  let seedIds = new Set();
+  if (matchingSectors) {
+    const sectorAnchors = new Set(
+      currentData.nodes.filter(c => isAnchorNode(c) && matchingSectors.has(c.sector)).map(c => c.id)
+    );
+    if (statusFilter === "all" && !search) {
+      seedIds = sectorAnchors;
+    } else {
+      const sectorPool = new Set(sectorAnchors);
+      currentData.links.forEach(l => {
+        if (relType !== "all" && l.type !== relType) return;
+        const sid = typeof l.source === "object" ? l.source.id : l.source;
+        const tid = typeof l.target === "object" ? l.target.id : l.target;
+        if (sectorAnchors.has(sid)) sectorPool.add(tid);
+        if (sectorAnchors.has(tid)) sectorPool.add(sid);
+      });
+      sectorPool.forEach(id => {
+        const n = nodeMap.get(id);
+        if (!n) return;
+        const okStatus = statusFilter === "all" || n.group === statusFilter;
+        const okSearch = !search || n.name.toLowerCase().includes(search) ||
+          (n.symbol && n.symbol.toLowerCase().includes(search)) ||
+          (n.desc && n.desc.toLowerCase().includes(search));
+        if (okStatus && okSearch) seedIds.add(id);
+      });
+    }
+  } else {
+    currentData.nodes.forEach(n => {
+      const okStatus = statusFilter === "all" || n.group === statusFilter;
+      const okSearch = !search || n.name.toLowerCase().includes(search) ||
+        (n.symbol && n.symbol.toLowerCase().includes(search)) ||
+        (n.desc && n.desc.toLowerCase().includes(search));
+      if (okStatus && okSearch) seedIds.add(n.id);
+    });
+  }
+
+  const visibleNodeIds = new Set(seedIds);
+  currentData.links.forEach(l => {
+    if (relType !== "all" && l.type !== relType) return;
+    const sid = typeof l.source === "object" ? l.source.id : l.source;
+    const tid = typeof l.target === "object" ? l.target.id : l.target;
+    if (seedIds.has(sid)) visibleNodeIds.add(tid);
+    if (seedIds.has(tid)) visibleNodeIds.add(sid);
+  });
+
+  if (!selectedNode) {
+    nodeSel.style("opacity", d => visibleNodeIds.has(d.id) ? 1 : 0.08);
+    linkSel.style("opacity", l => {
+      if (relType !== "all" && l.type !== relType) return 0;
+      const sid = typeof l.source === "object" ? l.source.id : l.source;
+      const tid = typeof l.target === "object" ? l.target.id : l.target;
+      return visibleNodeIds.has(sid) && visibleNodeIds.has(tid) ? 0.55 : 0.025;
+    });
+  }
+
+  return visibleNodeIds;
+}
+
+// ── CONTROLS & PANEL TOGGLES ──
+function toggleSidebar() {
+  document.getElementById("sidebar").classList.toggle("collapsed");
+  if (window.innerWidth <= 1050) document.getElementById("detail-panel").classList.add("collapsed");
+  syncOverlayClasses();
+}
+
+function toggleDetailPanel(forceState) {
+  const dp = document.getElementById("detail-panel");
+  if (typeof forceState === "boolean") dp.classList.toggle("collapsed", !forceState);
+  else dp.classList.toggle("collapsed");
+  if (window.innerWidth <= 1050 && !dp.classList.contains("collapsed")) {
+    document.getElementById("sidebar").classList.add("collapsed");
+  }
+  syncOverlayClasses();
+}
+
+function zoomBy(factor) {
+  userInteracted = true;
+  svg.transition().duration(260).call(zoom.scaleBy, factor);
+}
+
+function fitAllOrFiltered() {
+  const visible = updateGraphFilter();
+  fitNodesToView(visible);
+}
+
+function resetView() {
+  const sf = document.getElementById("sector-filters");
+  activeSectorFilters = new Set(["all"]);
+  sf.querySelectorAll(".sector-btn").forEach(b => {
+    b.classList.toggle("active", b.dataset.sector === "all");
+  });
+  document.getElementById("search-input").value = "";
+  document.getElementById("rel-type-select").value = "all";
+  activeRelType = "all";
+  setStatusFilter("all");
+  clearSelection();
+  fitNodesToView(null);
+}
+
+function toggleLabels() {
+  showLabels = !showLabels;
+  if (nodeSel) nodeSel.selectAll("text").style("display", showLabels ? "block" : "none");
+  document.getElementById("label-toggle-btn").classList.toggle("active-mode", showLabels);
+}
+
+function toggleColorMode() {
+  colorMode = colorMode === "status" ? "sector" : "status";
+  document.getElementById("color-mode-btn").textContent = colorMode === "status" ? "Color: Status" : "Color: Sector";
+  document.getElementById("color-mode-btn").classList.toggle("active-mode", colorMode === "sector");
+  if (nodeSel) {
+    nodeSel.selectAll("circle")
+      .attr("fill", nodeColor)
+      .attr("stroke", nodeStroke);
+  }
+  if (selectedNode) renderDetailPanel(nodeMap.get(selectedNode));
+}
+
+// ── DRAG ──
+function dragStarted(event, d) {
+  if (!event.active && simulation) simulation.alphaTarget(0.12).restart();
+  d.fx = d.x; d.fy = d.y;
+}
+function dragged(event, d) {
+  d.fx = event.x; d.fy = event.y;
+}
+function dragEnded(event, d) {
+  if (!event.active && simulation) simulation.alphaTarget(0);
+  d.fx = null; d.fy = null;
+}
+
+// ── RESPONSIVE OBSERVER ──
+function handleLayoutResize() {
+  syncOverlayClasses();
+  if (!simulation) return;
+  const { width, height } = getGraphSize();
+  simulation.force("center", d3.forceCenter(width / 2, height / 2));
+  simulation.force("x", d3.forceX(width / 2).strength(0.035));
+  simulation.force("y", d3.forceY(height / 2).strength(0.035));
+  simulation.alpha(0.2).restart();
+}
+
+const resizeObserver = new ResizeObserver(() => handleLayoutResize());
+resizeObserver.observe(graphContainer);
+
+if (window.innerWidth <= 1050) document.getElementById("detail-panel").classList.add("collapsed");
+if (window.innerWidth <= 720) document.getElementById("sidebar").classList.add("collapsed");
+syncOverlayClasses();
+
+document.getElementById("label-toggle-btn").classList.add("active-mode");
+
+// Determine initial mode from URL hash (#nifty, #nasdaq, #combined)
+const hashMode = window.location.hash.replace("#", "").toLowerCase();
+const initialMode = ["nifty", "nasdaq", "combined"].includes(hashMode) ? hashMode : "nifty";
+switchIndex(initialMode);
+</script>
+</body>
+</html>
